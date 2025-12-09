@@ -30,6 +30,15 @@ mutual
     operator: Operator
     left: Expr
     right: Expr
+
+  inductive Variable where
+    | named_variable (nv: String)
+    | array_access (aa: ArrayAccess)
+
+  structure ArrayAccess where
+    array: Variable
+    index: Expr
+    -- typ: Option ArrayType
 end
 
 structure AssignStatement where
@@ -59,6 +68,16 @@ mutual
     body: Statement
 end
 
+mutual
+  inductive TypeExpression where
+    | array_type_expression (ate: ArrayTypeExpression)
+    | named_typ_expression (nte: String)
+
+  structure ArrayTypeExpression where
+    array_size: Nat
+    base_type: TypeExpression
+end
+
 structure ParameterDefinition where
   name: String
   type_expression: TypeExpression
@@ -81,27 +100,6 @@ structure TypeDefinition where
 inductive GlobalDefinition where
   | procedure_definition (pd: ProcedureDefinition)
   | type_definition (td: TypeDefinition)
-
-mutual
-  inductive Variable where
-    | named_variable (nv: String)
-    | array_access (aa: ArrayAccess)
-
-  structure ArrayAccess where
-    array: Variable
-    index: Expr
-    typ: Option ArrayType
-end
-
-mutual
-  inductive TypeExpression where
-    | array_type_expression (ate: ArrayTypeExpression)
-    | named_typ_expression (nte: String)
-
-  structure ArrayTypeExpression where
-    array_size: Nat
-    base_type: TypeExpression
-end
 
 structure Program where
   definitions: List GlobalDefinition
