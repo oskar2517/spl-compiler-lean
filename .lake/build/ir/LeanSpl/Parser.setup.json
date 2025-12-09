@@ -1,0 +1,8 @@
+{"plugins": [],
+ "options": {},
+ "name": "LeanSpl.Parser",
+ "isModule": false,
+ "importArts":
+ {"LeanSpl.Absyn":
+  ["/Users/ninahammer/git/spl-compiler-lean/.lake/build/lib/lean/LeanSpl/Absyn.olean"]},
+ "dynlibs": []}

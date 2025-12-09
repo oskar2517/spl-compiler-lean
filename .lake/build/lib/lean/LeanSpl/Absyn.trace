@@ -1,9 +1,9 @@
 {"synthetic": false,
  "schemaVersion": "2025-09-10",
  "outputs":
- {"o": ["6d173ece60a7fc04.olean"],
-  "i": "7636b9c6dedeacfc.ilean",
-  "c": "52bf227150aab972.c"},
+ {"o": ["7a89f7085d37ed5f.olean"],
+  "i": "96b04b1ced9d764b.ilean",
+  "c": "167a85c86ccb73da.c"},
  "log":
  [{"message":
    ".> LEAN_PATH=/Users/ninahammer/git/spl-compiler-lean/.lake/build/lib/lean /Users/ninahammer/.elan/toolchains/leanprover--lean4---v4.25.2/bin/lean /Users/ninahammer/git/spl-compiler-lean/LeanSpl/Absyn.lean -o /Users/ninahammer/git/spl-compiler-lean/.lake/build/lib/lean/LeanSpl/Absyn.olean -i /Users/ninahammer/git/spl-compiler-lean/.lake/build/lib/lean/LeanSpl/Absyn.ilean -c /Users/ninahammer/git/spl-compiler-lean/.lake/build/ir/LeanSpl/Absyn.c --setup /Users/ninahammer/git/spl-compiler-lean/.lake/build/ir/LeanSpl/Absyn.setup.json --json",
@@ -22,7 +22,7 @@
   ["Lean 4.25.2, commit b86e2e5824bcdbfa0e8d02dd97b4c48792a385d1",
    "d946543e806d8350"],
   ["/Users/ninahammer/git/spl-compiler-lean/LeanSpl/Absyn.lean",
-   "2809146065a33837"],
+   "ba5b0c9bf9b35ede"],
   ["options", "00000000000006bb"],
   ["Module.leanArgs: #[]", "00000000000006bb"]],
- "depHash": "6346010fb7dd59fc"}
+ "depHash": "c02cc2ffaadcc4b2"}
