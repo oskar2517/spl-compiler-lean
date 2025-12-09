@@ -1,0 +1,28 @@
+{"synthetic": false,
+ "schemaVersion": "2025-09-10",
+ "outputs":
+ {"o": ["6d173ece60a7fc04.olean"],
+  "i": "7636b9c6dedeacfc.ilean",
+  "c": "52bf227150aab972.c"},
+ "log":
+ [{"message":
+   ".> LEAN_PATH=/Users/ninahammer/git/spl-compiler-lean/.lake/build/lib/lean /Users/ninahammer/.elan/toolchains/leanprover--lean4---v4.25.2/bin/lean /Users/ninahammer/git/spl-compiler-lean/LeanSpl/Absyn.lean -o /Users/ninahammer/git/spl-compiler-lean/.lake/build/lib/lean/LeanSpl/Absyn.olean -i /Users/ninahammer/git/spl-compiler-lean/.lake/build/lib/lean/LeanSpl/Absyn.ilean -c /Users/ninahammer/git/spl-compiler-lean/.lake/build/ir/LeanSpl/Absyn.c --setup /Users/ninahammer/git/spl-compiler-lean/.lake/build/ir/LeanSpl/Absyn.setup.json --json",
+   "level": "trace"}],
+ "inputs":
+ [["LeanSpl.Absyn:deps",
+   [["deps",
+     [["«lean-spl»/LeanSpl:extraDep",
+       [["@«lean-spl»:extraDep", "00000000000006bb"]]],
+      ["imports", "00000000000006bb"]]],
+    ["libs",
+     [["import dynlibs", "00000000000006bb"],
+      ["package external libraries", "00000000000006bb"],
+      ["module dynlibs", "00000000000006bb"],
+      ["module plugins", "00000000000006bb"]]]]],
+  ["Lean 4.25.2, commit b86e2e5824bcdbfa0e8d02dd97b4c48792a385d1",
+   "d946543e806d8350"],
+  ["/Users/ninahammer/git/spl-compiler-lean/LeanSpl/Absyn.lean",
+   "2809146065a33837"],
+  ["options", "00000000000006bb"],
+  ["Module.leanArgs: #[]", "00000000000006bb"]],
+ "depHash": "6346010fb7dd59fc"}

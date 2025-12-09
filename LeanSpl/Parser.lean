@@ -1,17 +1,11 @@
 import Std.Internal.Parsec.String
+import LeanSpl.Absyn
 
 open Std.Internal.Parsec
 open Std.Internal.Parsec.String
 
 namespace Parser
-
-inductive Expr where
-  | num (n : Int)
-  | add (l r : Expr)
-  | sub (l r : Expr)
-  | mul (l r : Expr)
-  | div (l r : Expr)
-  deriving Repr
+open Absyn
 
 abbrev Parser (α : Type) := Std.Internal.Parsec.String.Parser α
 
@@ -24,7 +18,7 @@ def integer : Parser Expr := do
   let digitsStr ← many1Chars digit
   let n := digitsStr.toInt!
   let n := if neg then -n else n
-  pure <| Expr.num n
+  pure <| Expr.int_literal n
 
 mutual
 
@@ -37,12 +31,12 @@ mutual
     (do
       skipChar '+'
       let right ← term
-      expr' (Expr.add left right))
+      expr' (Expr.binary_expression (BinaryExpression.mk Operator.add left right)))
     <|>
     (do
       skipChar '-'
       let right ← term
-      expr' (Expr.sub left right))
+      expr' (Expr.binary_expression (BinaryExpression.mk Operator.sub left right)))
     <|>
     pure left
 
@@ -55,12 +49,12 @@ mutual
     (do
       skipChar '*'
       let right ← factor
-      term' (Expr.mul left right))
+      term' (Expr.binary_expression (BinaryExpression.mk Operator.mul left right)))
     <|>
     (do
       skipChar '/'
       let right ← factor
-      term' (Expr.div left right))
+      term' (Expr.binary_expression (BinaryExpression.mk Operator.div left right)))
     <|>
     pure left
 
