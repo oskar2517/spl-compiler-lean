@@ -191,7 +191,7 @@ mutual
 
   partial def expr2 : Parser Expr := do
     let left ← expr3
-    (do
+    attempt (do
     let op ← star <|> slash
     let right ← expr2
     let op ← pure <| match op with
@@ -204,7 +204,7 @@ mutual
 
   partial def expr1 : Parser Expr := do
     let left ← expr2
-    (do
+    attempt (do
     let op ← plus <|> minus
     let right ← expr1
     let op ← pure <| match op with
@@ -217,7 +217,7 @@ mutual
 
   partial def expr0 : Parser Expr := do
     let left ← expr1
-    (do
+    attempt (do
     let op ← lt <|> le <|> gt <|> ge <|> eq <|> ne
     let right ← expr0
     let op ← pure <| match op with
@@ -360,7 +360,7 @@ def newline : Parser Token := do
   let _ ← pstring "'\\n'"
   pure <| Token.intlit 10
 
-def parse (s: String) : Except String Expr :=
-  Parser.run expr1 s
+def parse (s: String) : Except String (List GlobalDefinition) :=
+  Parser.run globalDefList s
 
 end Parser
