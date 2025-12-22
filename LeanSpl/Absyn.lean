@@ -15,6 +15,7 @@ inductive Operator where
   | lse
   | grt
   | gre
+  | default
   deriving Repr
 
 mutual
@@ -87,7 +88,7 @@ mutual
     deriving Repr
 
   structure ArrayTypeExpression where
-    array_size: Nat
+    array_size: Int
     base_type: TypeExpression
     deriving Repr
 end
@@ -107,7 +108,7 @@ structure ProcedureDefinition where
   name: String
   parameters: List ParameterDefinition
   body: List Statement
-  varaibles: List VariableDefinition
+  variables: List VariableDefinition
   deriving Repr
 
 structure TypeDefinition where
@@ -122,6 +123,22 @@ inductive GlobalDefinition where
 
 structure Program where
   definitions: List GlobalDefinition
+  deriving Repr
+
+inductive Token where
+  | other
+  | eq
+  | ne
+  | lt
+  | gt
+  | ge
+  | le
+  | plus
+  | minus
+  | star
+  | slash
+  | ident (i : String)
+  | intlit (i: Int)
   deriving Repr
 
 end Absyn
