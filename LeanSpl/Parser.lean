@@ -36,6 +36,10 @@ def character : Parser Int := do
   skipChar '\''
   pure <| char.front.toNat
 
+def newline : Parser Int := do
+  let _ ← pstring "'\\n'"
+  pure <| 10
+
 def integer : Parser Int := do
   let digitsStr ← many1Chars digit
   let n := digitsStr.toInt!
@@ -49,7 +53,7 @@ def hexNum : Parser Int := do
 
 def intlit : Parser Int := do
   whitespace
-  let value ← hexNum <|> integer <|> character
+  let value ← attempt hexNum <|> integer <|> character <|> newline
   whitespace
   pure value
 
@@ -355,10 +359,6 @@ partial def globalDefList : Parser (List GlobalDefinition) := do
   let defs ← many globalDef
   eof
   pure defs.toList
-
-def newline : Parser Token := do
-  let _ ← pstring "'\\n'"
-  pure <| Token.intlit 10
 
 def parse (s: String) : Except String (List GlobalDefinition) :=
   Parser.run globalDefList s

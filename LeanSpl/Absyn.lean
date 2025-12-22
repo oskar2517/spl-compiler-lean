@@ -137,8 +137,6 @@ inductive Token where
   | minus
   | star
   | slash
-  | ident (i : String)
-  | intlit (i: Int)
   deriving Repr
 
 end Absyn
