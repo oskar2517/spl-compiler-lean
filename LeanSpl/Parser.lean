@@ -34,7 +34,7 @@ def sepBy {α} (p : Parser α) (sep : Parser Unit) : Parser (List α) :=
 
 partial def chainl1 (p : Parser α) (op : Parser (α -> α -> α)) : Parser α := do
   let mut x <- p
-  while true do
+  repeat do
     let r <- attempt (some <$> op) <|> pure none
     match r with
     | none => return x
@@ -61,11 +61,11 @@ def charLiteral : Parser Int := do
   skipChar '\''
   let char <- take 1
   skipChar '\''
-  pure <| char.front.toNat
+  pure char.front.toNat
 
 def charNewLine : Parser Int := do
   let _ <- pstring "'\\n'"
-  pure <| 10
+  pure '\n'.toNat
 
 def character : Parser Int := attempt charNewLine <|> charLiteral
 
