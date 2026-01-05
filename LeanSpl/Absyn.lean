@@ -1,142 +1,72 @@
 namespace Absyn
 
-inductive UnaryOperator where
-  | minus
-  deriving Repr
+inductive UnOp where
+  | neg
+  deriving Repr, DecidableEq
 
-inductive Operator where
-  | add
-  | sub
-  | mul
-  | div
-  | equ
-  | neq
-  | lst
-  | lse
-  | grt
-  | gre
-  | default
-  deriving Repr
+inductive BinOp where
+  | add | sub | mul | div
+  | eq | ne | lt | le | gt | ge
+   deriving Repr, DecidableEq
 
 mutual
-  inductive Expr where
-    | binary_expression (be: BinaryExpression)
-    | unary_expression (ue: UnaryExpression)
-    | int_literal (i: Int)
-    | variable_expression (ve: Variable)
+  inductive Expr : Type where
+    | bin (op : BinOp) (left right : Expr)
+    | un  (op : UnOp) (operand : Expr)
+    | int (i : Int)
+    | var (v : Variable)
     deriving Repr
 
-  structure UnaryExpression where
-    operator: UnaryOperator
-    operand: Expr
+  inductive Variable : Type where
+    | named (name : String)
+    | index (array : Variable) (index: Expr)
     deriving Repr
 
-  structure BinaryExpression where
-    operator: Operator
-    left: Expr
-    right: Expr
-    deriving Repr
-
-  inductive Variable where
-    | named_variable (nv: String)
-    | array_access (aa: ArrayAccess)
-    deriving Repr
-
-  structure ArrayAccess where
-    array: Variable
-    index: Expr
-    -- typ: Option ArrayType
+  inductive Stmt : Type where
+    | call   (name : String) (arguments : List Expr)
+    | assign (target : Variable) (value : Expr)
+    | if_    (condition : Expr) (then_branch : Stmt) (else_branch : Option Stmt)
+    | while_ (condition : Expr) (body : Stmt)
+    | block  (stmts : List Stmt)
+    | empty
     deriving Repr
 end
 
-structure AssignStatement where
-  target: Variable
-  value: Expr
+inductive TypeExpr where
+  | array (size : Nat) (base_type : TypeExpr)
+  | named (name : String)
   deriving Repr
 
-structure CallStatement where
+structure ParamDef where
   name: String
-  arguments: List Expr
+  type_expr: TypeExpr
+  is_ref: Bool
   deriving Repr
 
-mutual
-  inductive Statement where
-    | call_statement (cs: CallStatement)
-    | assign_statement (as: AssignStatement)
-    | if_statement (is: IfStatement)
-    | emptyStatement
-    | while_statement (ws: WhileStatement)
-    | compound_statement (sl: List Statement)
-    deriving Repr
-
-  structure IfStatement where
-    condition: Expr
-    then_branch: Statement
-    else_branch: Option Statement
-    deriving Repr
-
-  structure WhileStatement where
-    condition: Expr
-    body: Statement
-    deriving Repr
-end
-
-mutual
-  inductive TypeExpression where
-    | array_type_expression (ate: ArrayTypeExpression)
-    | named_typ_expression (nte: String)
-    deriving Repr
-
-  structure ArrayTypeExpression where
-    array_size: Int
-    base_type: TypeExpression
-    deriving Repr
-end
-
-structure ParameterDefinition where
+structure VarDef where
   name: String
-  type_expression: TypeExpression
-  is_reference: Bool
+  type_expr: TypeExpr
   deriving Repr
 
-structure VariableDefinition where
+structure ProcDef where
   name: String
-  type_expression: TypeExpression
+  parameters: List ParamDef
+  variables: List VarDef
+  body: List Stmt
   deriving Repr
 
-structure ProcedureDefinition where
+structure TypeDef where
   name: String
-  parameters: List ParameterDefinition
-  body: List Statement
-  variables: List VariableDefinition
+  type_expr: TypeExpr
   deriving Repr
 
-structure TypeDefinition where
-  name: String
-  type_expression: TypeExpression
-  deriving Repr
-
-inductive GlobalDefinition where
-  | procedure_definition (pd: ProcedureDefinition)
-  | type_definition (td: TypeDefinition)
+inductive GlobalDef where
+  | procedure (d: ProcDef)
+  | type (d: TypeDef)
   deriving Repr
 
 structure Program where
-  definitions: List GlobalDefinition
-  deriving Repr
-
-inductive Token where
-  | other
-  | eq
-  | ne
-  | lt
-  | gt
-  | ge
-  | le
-  | plus
-  | minus
-  | star
-  | slash
+  definitions: List GlobalDef
   deriving Repr
 
 end Absyn

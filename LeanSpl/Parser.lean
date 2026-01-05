@@ -9,358 +9,291 @@ open Absyn
 
 abbrev Parser (α : Type) := Std.Internal.Parsec.String.Parser α
 
-mutual
-  partial def comment : Parser Unit := do
-    tag "//"
-    let _ ← manyChars <| satisfy fun c => c != '\n'
-    pure ()
+def ws1 : Parser Unit :=
+  (many1Chars (satisfy Char.isWhitespace)) *> pure ()
 
-  partial def whitespace : Parser Unit := do
-    ws <|> comment
+partial def comment : Parser Unit :=
+  skipString "//" *> manyChars (satisfy (· != '\n')) *> (optional (skipChar '\n') *> pure ())
 
-  partial def tag (s: String) : Parser Unit := do
-    whitespace
-    skipString s
-    whitespace
-end
+partial def whitespace : Parser Unit :=
+  (many (ws1 <|> comment)) *> pure ()
+
+def lexeme (p : Parser α) : Parser α :=
+  whitespace *> p <* whitespace
+
+def symbol (s : String) : Parser Unit :=
+  lexeme (skipString s)
+
+def sepBy1 (p : Parser α) (sep : Parser Unit) : Parser (List α) := do
+  let x ← p
+  let xs ← many (sep *> p)
+  pure (x :: xs.toList)
+
+def sepBy {α} (p : Parser α) (sep : Parser Unit) : Parser (List α) :=
+  sepBy1 p sep <|> pure []
+
+partial def chainl1 (p : Parser α) (op : Parser (α -> α -> α)) : Parser α := do
+  let mut x <- p
+  while true do
+    let r <- attempt (some <$> op) <|> pure none
+    match r with
+    | none => return x
+    | some f =>
+      let y <- p
+      x := f x y
+  unreachable!
+
+def isKeyword (s : String) : Bool :=
+  s == "if" || s == "else" || s == "while" ||
+  s == "proc" || s == "type" || s == "var" ||
+  s == "array" || s == "of" || s == "ref"
 
 def ident : Parser String := do
-  whitespace
-  let first ← asciiLetter <|> pchar '_'
-  let later ← manyChars <| asciiLetter <|> pchar '_' <|> digit
-  pure <| first.toString ++ later
+  let first <- asciiLetter <|> pchar '_'
+  let later <- manyChars (asciiLetter <|> pchar '_' <|> digit)
+  let s :=  first.toString ++ later
+  if isKeyword s then
+    fail s!"keyword '{s}' cannot be used as identifier"
+  else
+    pure s
 
-def character : Parser Int := do
+def charLiteral : Parser Int := do
   skipChar '\''
-  let char ← take 1
+  let char <- take 1
   skipChar '\''
   pure <| char.front.toNat
 
-def newline : Parser Int := do
-  let _ ← pstring "'\\n'"
+def charNewLine : Parser Int := do
+  let _ <- pstring "'\\n'"
   pure <| 10
 
-def integer : Parser Int := do
-  let digitsStr ← many1Chars digit
+def character : Parser Int := attempt charNewLine <|> charLiteral
+
+def decInteger : Parser Int := do
+  let digitsStr <- many1Chars digit
   let n := digitsStr.toInt!
   pure n
 
-def hexNum : Parser Int := do
+def hexInteger : Parser Int := do
   skipString "0x"
-  let hex ← many1 hexDigit
-  let hex ← pure <| hex.map (fun d => if d.isDigit then d.toNat else d.toLower.toNat - 'a'.toNat + 58)
-  pure <| hex.foldl (fun acc d => (acc - 3) * 16 + Int.ofNat d) 0
+  let cs <- many1 hexDigit
+  let ds := cs.map (fun d =>
+    if d.isDigit then
+      d.toNat - '0'.toNat
+    else
+      d.toLower.toNat - 'a'.toNat + 10
+  )
+  pure <| ds.foldl (fun acc d => acc * 16 + Int.ofNat d) 0
 
-def intlit : Parser Int := do
-  whitespace
-  let value ← attempt hexNum <|> integer <|> character <|> newline
-  whitespace
-  pure value
+def integer : Parser Int := attempt hexInteger <|> decInteger
 
-def namedTypeExpr : Parser TypeExpression := do
-  let id ← ident
-  pure <| TypeExpression.named_typ_expression id
+def intlit : Parser Int := integer <|> character
 
-mutual
-
-partial def arrayTypeExpr : Parser TypeExpression := do
-  tag "array"
-  tag "["
-  let len ← intlit
-  tag "]"
-  tag "of"
-  let te ← typeExpr
-  pure <| TypeExpression.array_type_expression <| ArrayTypeExpression.mk len te
-
-partial def typeExpr : Parser TypeExpression := do
-  let te ← arrayTypeExpr <|> namedTypeExpr
-  pure te
-
-end
-
-def emptyParamList : Parser (List ParameterDefinition) := do
-  pure []
-
-def ref_param : Parser ParameterDefinition := do
-  tag "ref"
-  let id ← ident
-  tag ":"
-  let te ← typeExpr
-  pure <| ParameterDefinition.mk id te true
-
-def non_ref_param : Parser ParameterDefinition := do
-  let id ← ident
-  tag ":"
-  let te ← typeExpr
-  pure <| ParameterDefinition.mk id te false
-
-def parameter : Parser (List ParameterDefinition) := do
-  (fun x => [x]) <$> (ref_param <|> non_ref_param)
+def namedTypeExpr : Parser TypeExpr := do
+  let id <- lexeme ident
+  pure <| TypeExpr.named id
 
 mutual
+  partial def arrayTypeExpr : Parser TypeExpr := do
+    symbol "array"
+    symbol "["
+    let len <- lexeme intlit
+    symbol "]"
+    symbol "of"
+    let te <- typeExpr
+    pure <| TypeExpr.array (len.toNat) te
 
-  partial def moreThanOneParameter : Parser (List ParameterDefinition) := do
-    let param ← parameter
-    tag ","
-    let tail ← nonEmptyParamList
-    pure <| param ++ tail
-
-  partial def nonEmptyParamList : Parser (List ParameterDefinition) := do
-    attempt moreThanOneParameter <|> parameter
-
+  partial def typeExpr : Parser TypeExpr := arrayTypeExpr <|> namedTypeExpr
 end
 
-def paramList : Parser (List ParameterDefinition) := do
-  nonEmptyParamList <|> emptyParamList
+def refParam : Parser ParamDef := do
+  symbol "ref"
+  let id <- lexeme ident
+  symbol ":"
+  let te <- typeExpr
+  pure <| ParamDef.mk id te true
 
-def eq : Parser Token := do
-  tag "="
-  pure Token.eq
+def nonRefParam : Parser ParamDef := do
+  let id <- lexeme ident
+  symbol ":"
+  let te <- typeExpr
+  pure <| ParamDef.mk id te false
 
-def ne : Parser Token := do
-  tag "#"
-  pure Token.ne
+def parameter : Parser ParamDef := refParam <|> nonRefParam
 
-def lt : Parser Token := do
-  tag "<"
-  pure Token.lt
+def paramList : Parser (List ParamDef) := sepBy parameter (symbol ",")
 
-def gt : Parser Token := do
-  tag ">"
-  pure Token.gt
+def eq : Parser BinOp := symbol "=" *> pure BinOp.eq
 
-def le : Parser Token := do
-  tag "<="
-  pure Token.le
+def ne : Parser BinOp := symbol "#" *> pure BinOp.ne
 
-def ge : Parser Token := do
-  tag ">="
-  pure Token.ge
+def lt : Parser BinOp := symbol "<" *> pure BinOp.lt
 
-def plus : Parser Token := do
-  tag "+"
-  pure Token.plus
+def gt : Parser BinOp := symbol ">" *> pure BinOp.gt
 
-def minus : Parser Token := do
-  tag "-"
-  pure Token.minus
+def le : Parser BinOp := symbol "<=" *> pure BinOp.le
 
-def star : Parser Token := do
-  tag "*"
-  pure Token.star
+def ge : Parser BinOp := symbol ">=" *> pure BinOp.ge
 
-def slash : Parser Token := do
-  tag "/"
-  pure Token.slash
+def add : Parser BinOp := symbol "+" *> pure BinOp.add
 
-def intlitExpr : Parser Expr := do
-  let i ← intlit
-  pure <| Expr.int_literal i
+def sub : Parser BinOp := symbol "-" *> pure BinOp.sub
+
+def mul : Parser BinOp := symbol "*" *> pure BinOp.mul
+
+def div : Parser BinOp := symbol "/" *> pure BinOp.div
+
+def intExpr : Parser Expr := do
+  let i <- lexeme intlit
+  pure <| Expr.int i
 
 def namedVariable : Parser Variable := do
-  let id ← ident
-  pure <| Variable.named_variable id
+  let id <- lexeme ident
+  pure <| Variable.named id
+
+partial def expr2Op : Parser (Expr -> Expr -> Expr) :=
+  (mul *> pure (fun l r => Expr.bin BinOp.mul l r))
+  <|> (div *> pure (fun l r => Expr.bin BinOp.div l r))
+
+partial def expr1Op : Parser (Expr -> Expr -> Expr) :=
+  (add *> pure (fun l r => Expr.bin BinOp.add l r))
+  <|> (sub *> pure (fun l r => Expr.bin BinOp.sub l r))
 
 mutual
-
-  partial def variableParser : Parser Variable := do
-    let base ← namedVariable
-    let arr ← many (attempt do
-      tag "["
-      let ex ← expr
-      tag "]"
+  partial def indexedVariable : Parser Variable := do
+    let base <- namedVariable
+    let arr <- many (do
+      symbol "["
+      let ex <- expr
+      symbol "]"
       pure ex
     )
-    pure <| arr.foldl (fun var e => Variable.array_access <| ArrayAccess.mk var e) base
+    pure <| arr.foldl (fun var e => Variable.index var e) base
 
   partial def variableExpr : Parser Expr := do
-    let var ← variableParser
-    pure <| Expr.variable_expression var
+    let var <- indexedVariable
+    pure <| Expr.var var
 
   partial def parenthesisExpr : Parser Expr := do
-    tag "("
-    let ex ← expr
-    tag ")"
+    symbol "("
+    let ex <- expr
+    symbol ")"
     pure ex
 
-  partial def expr4 : Parser Expr := do
-    intlitExpr <|> variableExpr <|> parenthesisExpr
+  partial def expr4 : Parser Expr := intExpr <|> variableExpr <|> parenthesisExpr
 
-  partial def expr3 : Parser Expr := (do
-    let _ ← minus
-    let ex ← expr3
-    pure <| Expr.unary_expression <| UnaryExpression.mk UnaryOperator.minus ex)
-    <|>
-    expr4
+  partial def expr3 : Parser Expr :=
+    (do
+      symbol "-"
+      let ex <- expr3
+      pure <| Expr.un UnOp.neg ex
+    ) <|> expr4
 
-  partial def expr2 : Parser Expr := do
-    let left ← expr3
-    attempt (do
-    let op ← star <|> slash
-    let right ← expr2
-    let op ← pure <| match op with
-      | Absyn.Token.star => Operator.mul
-      | Absyn.Token.slash => Operator.div
-      | _ => Operator.default
-    pure <| Expr.binary_expression <| BinaryExpression.mk op left right)
-    <|>
-    pure left
+  partial def expr2 : Parser Expr := chainl1 expr3 expr2Op
 
-  partial def expr1 : Parser Expr := do
-    let left ← expr2
-    attempt (do
-    let op ← plus <|> minus
-    let right ← expr1
-    let op ← pure <| match op with
-      | Absyn.Token.plus => Operator.add
-      | Absyn.Token.minus => Operator.sub
-      | _ => Operator.default
-    pure <| Expr.binary_expression <| BinaryExpression.mk op left right)
-    <|>
-    pure left
+  partial def expr1 : Parser Expr := chainl1 expr2 expr1Op
 
   partial def expr0 : Parser Expr := do
-    let left ← expr1
+    let left <- expr1
     attempt (do
-    let op ← lt <|> le <|> gt <|> ge <|> eq <|> ne
-    let right ← expr0
-    let op ← pure <| match op with
-      | Absyn.Token.eq => Operator.equ
-      | Absyn.Token.ne => Operator.neq
-      | Absyn.Token.le => Operator.lse
-      | Absyn.Token.lt => Operator.lst
-      | Absyn.Token.ge => Operator.gre
-      | Absyn.Token.gt => Operator.grt
-      | _ => Operator.default
-    pure <| Expr.binary_expression <| BinaryExpression.mk op left right)
-    <|>
-    pure left
+      let op <- le <|> lt <|> ge <|> gt <|> eq <|> ne
+      let right <- expr1 -- No-assoc
+      pure <| Expr.bin op left right
+    ) <|> pure left
 
-  partial def expr : Parser Expr := do
-      expr0
-
+  partial def expr : Parser Expr := expr0
 end
+
+def argumentList : Parser (List Expr) := sepBy expr (symbol ",")
+
+def emptyStatement : Parser Stmt := do
+  symbol ";"
+  pure Stmt.empty
+
+def callStatement : Parser Stmt := do
+  let id <- lexeme ident
+  symbol "("
+  let args <- argumentList
+  symbol ")"
+  symbol ";"
+  pure <| Stmt.call id args
 
 mutual
-  partial def moreThanOneArgument : Parser (List Expr) := do
-    let ex ← (fun x => [x]) <$> expr
-    tag ","
-    let list ← nonEmptyArgumentList
-    pure <| ex ++ list
+  partial def ifStatement : Parser Stmt := do
+    symbol "if"
+    symbol "("
+    let c ← expr
+    symbol ")"
+    let t ← statement
+    let e ← (some <$> (symbol "else" *> statement)) <|> pure none
+    pure <| Stmt.if_ c t e
 
+  partial def assignStatement : Parser Stmt := do
+    let var <- indexedVariable
+    symbol ":="
+    let ex <- expr
+    symbol ";"
+    pure <| Stmt.assign var ex
 
-  partial def nonEmptyArgumentList : Parser (List Expr) := do
-    attempt moreThanOneArgument <|> (fun x => [x]) <$> expr
+  partial def whileStatement : Parser Stmt := do
+    symbol "while"
+    symbol "("
+    let ex <- expr
+    symbol ")"
+    let st <- statement
+    pure <| Stmt.while_ ex st
 
+  partial def compoundStatement : Parser Stmt := do
+    symbol "{"
+    let st <- many statement
+    symbol "}"
+    pure <| Stmt.block st.toList
+
+  partial def statement : Parser Stmt :=
+    emptyStatement <|> ifStatement <|> attempt assignStatement
+    <|> whileStatement <|> compoundStatement <|> callStatement
 end
 
-def emptyArgumentList : Parser (List Expr) :=
-  pure []
+def variableDef : Parser VarDef := do
+  symbol "var"
+  let name <- ident
+  symbol ":"
+  let te <- typeExpr
+  symbol ";"
+  pure <| VarDef.mk name te
 
-def argumentList : Parser (List Expr) := do
-  nonEmptyArgumentList <|> emptyArgumentList
+def procDef : Parser ProcDef := do
+  symbol "proc"
+  let name <- ident
+  symbol "("
+  let params <- paramList
+  symbol ")"
+  symbol "{"
+  let vars <- many variableDef
+  let statements <- many statement
+  symbol "}"
+  pure <| ProcDef.mk name params vars.toList statements.toList
 
-def emptyStatement : Parser Statement := do
-  tag ";"
-  pure Statement.emptyStatement
+def typeDef : Parser TypeDef := do
+  symbol "type"
+  let id <- ident
+  symbol "="
+  let typeExpr <- typeExpr
+  symbol ";"
+  pure <| TypeDef.mk id typeExpr
 
-def callStatement : Parser Statement := do
-  let id ← ident
-  tag "("
-  let args ← argumentList
-  tag ")"
-  tag ";"
-  pure <| Statement.call_statement <| CallStatement.mk id args
-
-
-mutual
-  partial def ifStatementWithElse : Parser Statement := do
-    tag "if"
-    tag "("
-    let ex ← expr
-    tag ")"
-    let st ← statement
-    tag "else"
-    let elseSt ← statement
-    pure <| Statement.if_statement <| IfStatement.mk ex st (some elseSt)
-
-  partial def ifStatementWithoutElse : Parser Statement := do
-    tag "if"
-    tag "("
-    let ex ← expr
-    tag ")"
-    let st ← statement
-    pure <| Statement.if_statement <| IfStatement.mk ex st none
-
-  partial def ifStatement : Parser Statement := do
-    attempt ifStatementWithElse <|> ifStatementWithoutElse
-
-  partial def assignStatement : Parser Statement := do
-    let var ← variableParser
-    tag ":="
-    let ex ← expr
-    tag ";"
-    pure <| Statement.assign_statement <| AssignStatement.mk var ex
-
-  partial def whileStatement : Parser Statement := do
-    tag "while"
-    tag "("
-    let ex ← expr
-    tag ")"
-    let st ← statement
-    pure <| Statement.while_statement <| WhileStatement.mk ex st
-
-  partial def compoundStatement : Parser Statement := do
-    tag "{"
-    let st ← many statement
-    tag "}"
-    pure <| Statement.compound_statement st.toList
-
-  partial def statement : Parser Statement := do
-    emptyStatement <|> ifStatement <|> attempt assignStatement <|> whileStatement <|> compoundStatement <|> callStatement
-
-end
-
-def variableDef : Parser VariableDefinition := do
-  tag "var"
-  let name ← ident
-  tag ":"
-  let te ← typeExpr
-  tag ";"
-  pure <| VariableDefinition.mk name te
-
-def procDef : Parser ProcedureDefinition := do
-  tag "proc"
-  let name ← ident
-  tag "("
-  let params ← paramList
-  tag ")"
-  tag "{"
-  let vars ← many variableDef
-  let statements ← many statement
-  tag "}"
-  pure <| ProcedureDefinition.mk name params statements.toList vars.toList
-
-def typeDef : Parser TypeDefinition := do
-  ws
-  tag "type"
-  let id ← ident
-  tag "="
-  let typeExpr ← typeExpr
-  tag ";"
-  pure <| TypeDefinition.mk id typeExpr
-
-def globalDef : Parser GlobalDefinition := do
-  (GlobalDefinition.type_definition <$> typeDef)
+def globalDef : Parser GlobalDef := do
+  (GlobalDef.type <$> typeDef)
   <|>
-  (GlobalDefinition.procedure_definition <$> procDef)
+  (GlobalDef.procedure <$> procDef)
 
-partial def globalDefList : Parser (List GlobalDefinition) := do
-  let defs ← many globalDef
+partial def globalDefList : Parser (List GlobalDef) := do
+  whitespace
+  let defs <- many globalDef
   eof
   pure defs.toList
 
-def parse (s: String) : Except String (List GlobalDefinition) :=
+def parse (s: String) : Except String (List GlobalDef) :=
   Parser.run globalDefList s
 
 end Parser
