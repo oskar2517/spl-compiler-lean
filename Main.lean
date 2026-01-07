@@ -5,6 +5,7 @@ def main : IO Unit := IO.println "Hello World"
 #eval Parser.parse "
 // This is a comment
 // This is another
+// '\\n'
 proc main() {
   var x: int;
 
