@@ -293,7 +293,11 @@ partial def globalDefList : Parser (List GlobalDef) := do
   eof
   pure defs.toList
 
-def parse (s: String) : Except String (List GlobalDef) :=
-  Parser.run globalDefList s
+def program : Parser Program := do
+  let defs <- globalDefList
+  pure ⟨ defs ⟩
+
+def parse (s: String) : Except String Program :=
+  Parser.run program s
 
 end Parser
