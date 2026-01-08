@@ -1,18 +1,11 @@
 import LeanSpl.Parser
+import LeanSpl.SemanticAnalysis
 import LeanSpl.TableBuilder
 
 def main : IO Unit := IO.println "Hello World"
 
 #eval do
   let ast <-Parser.parse "
-      //////////////////////////////////////////////////////////////////
-// bigtest.spl: An SPL program covering many constructs of the SPL
-//				    language.
-// U. Meyer, 17.12.2018 (initial version)
-//            6.5.2019  (updates)
-//////////////////////////////////////////////////////////////////
-
-// All kinds of type and procedure declarations spread across the program
 type myInt = int;
 
 // Procedure with two call-by-value parameters
@@ -165,4 +158,5 @@ proc error(i : int, expectedI : int) {
    printc(10);
 }
       "
-  TableBuilder.buildSymbolTable ast
+  let table <- TableBuilder.buildSymbolTable ast
+  SemanticAnalysis.checkProgram ast table
