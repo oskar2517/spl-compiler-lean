@@ -7,16 +7,17 @@ mutual
   structure ArrayType where
     base: SplType
     size: Nat
-    deriving Repr
+    deriving Repr, BEq
 
   inductive PrimitiveType where
     | int
     | bool
+    deriving Repr, BEq
 
   inductive SplType where
     | arr (a: ArrayType)
     | primitive (p: PrimitiveType)
-    deriving Repr
+    deriving Repr, BEq
 
   structure Parameter where
     name: String
@@ -59,7 +60,7 @@ namespace SymbolTable
 
     pure ⟨ ent :: table.entries ⟩
 
-  partial def lookup (table: SymbolTable) (upperLevel: Option SymbolTable) (name: String) : Option Entry := do
+  def lookup (table: SymbolTable) (upperLevel: Option SymbolTable) (name: String) : Option Entry := do
     match table.entries.find? (fun e => e.fst == name) with
       | some e => pure e.snd
       | none => match upperLevel with
@@ -70,5 +71,14 @@ namespace SymbolTable
 
 
 end SymbolTable
+
+namespace SplType
+
+  def isArray (var: SplType) : Bool :=
+    match var with
+      | SplType.arr _ => true
+      | SplType.primitive _ => false
+
+end SplType
 
 end Table

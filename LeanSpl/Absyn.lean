@@ -1,3 +1,5 @@
+import LeanSpl.Table
+
 namespace Absyn
 
 inductive UnOp where
@@ -68,5 +70,23 @@ inductive GlobalDef where
 structure Program where
   definitions: List GlobalDef
   deriving Repr
+
+namespace Expr
+
+  def isVariable (expr: Expr) : Bool :=
+    match expr with
+      | Expr.var _ => true
+      | _ => false
+
+end Expr
+
+namespace BinOp
+
+  def operatorType (op: BinOp) : Table.SplType :=
+    match op with
+      | BinOp.add | BinOp.div | BinOp.mul | BinOp.sub => Table.SplType.primitive Table.PrimitiveType.int
+      | _ => Table.SplType.primitive Table.PrimitiveType.bool
+
+end BinOp
 
 end Absyn
