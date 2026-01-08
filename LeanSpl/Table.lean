@@ -46,10 +46,29 @@ mutual
 
   structure SymbolTable : Type where
     entries: List (String × Entry)
-    upper_lvl: Option SymbolTable
     deriving Repr
 end
 
+namespace SymbolTable
 
+  def enter (table : SymbolTable) (name : String) (entry : Entry) : Except String SymbolTable := do
+    let mut ent <- pure (name, entry)
+    for e in table.entries do
+      if e.fst = name then
+        ent <- Except.error s!"{name} already exists"
+
+    pure ⟨ ent :: table.entries ⟩
+
+  partial def lookup (table: SymbolTable) (upperLevel: Option SymbolTable) (name: String) : Option Entry := do
+    match table.entries.find? (fun e => e.fst == name) with
+      | some e => pure e.snd
+      | none => match upperLevel with
+        | some global => match global.entries.find? (fun e => e.fst == name) with
+          | some e => pure e.snd
+          | none => none
+        | none => none
+
+
+end SymbolTable
 
 end Table
