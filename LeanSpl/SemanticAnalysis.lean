@@ -67,9 +67,7 @@ def checkCallStmt (name : String) (args: List Absyn.Expr) (table: Table.SymbolTa
     | false => Except.error s!"{name}: argument type mismatch"
 
     let _ <- if p.is_ref && ¬ Absyn.Expr.isVariable arg then
-      match arg with
-        | Absyn.Expr.bin _ _ _ => Except.error "Aus irgendeinem Grund bin ich binary"
-        | _ => Except.error "nö"
+      Except.error "Argument to a reference parameter must be variable"
 
 mutual
   partial def checkWhileStmt (cond: Absyn.Expr) (body: Absyn.Stmt) (table: Table.SymbolTable) (global: Table.SymbolTable): Except String Unit := do

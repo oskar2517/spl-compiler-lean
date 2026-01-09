@@ -2,161 +2,53 @@ import LeanSpl.Parser
 import LeanSpl.SemanticAnalysis
 import LeanSpl.TableBuilder
 
-def main : IO Unit := IO.println "Hello World"
+def padString (w : Nat) (s : String) : String :=
+  if s.length >= w then
+    s
+  else
+    s ++ String.mk (List.replicate (w - s.length) ' ')
 
-#eval do
-  let ast <-Parser.parse "
-type myInt = int;
+def compile (prog: String) (fileName: String): IO Unit :=
+    match Parser.parse prog with
+            | Except.ok ast => match TableBuilder.buildSymbolTable ast with
+                | Except.ok table => match SemanticAnalysis.checkProgram ast table with
+                    | Except.ok _ => IO.println s!"{padString 20 fileName}: \x1b[32mno errors found\x1b[0m"
+                    | Except.error e => IO.println s!"\x1b[1;31merror:\x1b[0m {fileName}: {e}"
+                | Except.error e => IO.println s!"\x1b[1;31merror:\x1b[0m {fileName}: {e}"
+            | Except.error e => IO.println s!"\x1b[1;31merror:\x1b[0m {fileName}: {e}"
 
-// Procedure with two call-by-value parameters
-proc callbyval(x : int, y: myInt) {
-	x := x+                1;
-	y := y+1;
-}
+def debugCompile (prog: String): IO Unit :=
+    match Parser.parse prog with
+            | Except.ok ast => match TableBuilder.buildSymbolTable ast with
+                | Except.ok table => match SemanticAnalysis.checkProgram ast table with
+                    | Except.ok _ => IO.println "no errors found"
+                    | Except.error e => IO.println s!"merror: {e}"
+                | Except.error e => IO.println s!"merror: {e}"
+            | Except.error e => IO.println s!"merror: {e}"
 
-// '\\n' sollte als 10 erkannt werden.
-type vektor = array ['\\n'] of myInt;
+def main : IO Unit := do
+    let testPath <- pure <| ⟨ "./runtime_tests" ⟩
+    let dir <- System.FilePath.readDir testPath
 
-// Procedure with two call-by-reference parameters
-proc callbyref(ref x : int, ref y: myInt) {
-	x := x+1;
-	y := y+1;
-}
+    for file in dir do
+        let handle <- IO.FS.Handle.mk s!"./runtime_tests/{file.fileName}" IO.FS.Mode.read
+        let contents <- IO.FS.Handle.readToEnd handle
 
-// Procedure mit array (muss ref sein)
-proc callArray(ref v : vektor) {
-	v[0]:=99; v[4]:=66;
-}
+        compile contents file.fileName
 
-// Mehrdimensionale Arrays
-type matrix = array [8] of array [8] of int;
-type tensor = array [0x10] of matrix;
 
-// rekursive Funktion
-proc callRecursive(n : int, ref res : myInt) {
-   if (n<=10) {
-		callRecursive(n+1, res);
-	}
-	res := res+n;
-	n:=n+1;
-}
+#eval debugCompile "//
+// test1.spl -- Aufgabenblatt 2, Testprogramm a)
+//
 
-// a nasty procedure - how big is the framesize?
-proc manyargs(i : int, j : myInt, ref k:tensor, ref l : myInt) {
-	callRecursive(i,j);
-	if (i>0) manyargs(i-1,l,k,j);
-   if (i=0) check(i,j,0,67);
-   if (i=1) check(i,j,1,69);
-	printi(i); printc(' '); printi(j);printc(10);
-}
+proc main() {
+  var x: int;
+  var y: int;
 
-proc hide () {
-   var myInt : myInt; // KEIN Syntax-Error!
-   var hide  : int;   // KEIN Syntax-Error!
-}
-
-proc main () {
-	// Variable Declarations
-	var i : int;
-	var j : myInt;
-	var k : array [10] of myInt;
-	var l : array [8] of array [8] of int;
-	var m : array [5] of vektor;
-	var n : vektor;
-	var t : tensor;
-
-	// Assignments and long Expressions (uses all registers)
-	ausgabe(1);
-	i := 1-2-3;
-	j := 1+2*-i-(7-77)/7/5*(2* (1-(2+(4-(5+(4-(3+(2-(1*(1+(3-(4-5))))))))))));
-
-   check(i,j,-4,25);
-	printi(i); printc(' '); printi(j); printc('\\n');
-
-	i := 0xAAAA;
-	j := 0xBBBB - 'A' * 2;
-   check(i,j,43690,47929);
-	printi(i); printc(' '); printi(j); printc('\\n');
-
-	i:=-1; j := ' ';
-	m[-0][007]:= i-(-i);
-	m[-i][8]:=135;
-	m[1+1][9]:='\\n';
-   check(m[0][007],m[1][8],-2,135);
-	printi(m[0][007]); printc(' '); printi(m[1][8]);  printc('\\n');
-
-	// more procedure calls
-	ausgabe(2);
-	callbyval(i, j);   // i,j should be unchanged
-   check(i,j, -1, 32);
-	printi(i); printc(' '); printi(j); printc('\\n');
-	callbyref(i,j);    // i,j incremented by 1
-   check(i,j, 0,33);
-	printi(i); printc(' '); printi(j); printc('\\n');
-
-	n[0]:=5; n[1]:=4; n[2]:=3; n[3]:=2; n[4]:=1;
-	callArray(n);
-   check(n[0], n[4], 99, 66);
-	printi(n[0]); printc(' '); printi(n[4]); printc('\\n');
-
-	i:=1; j:=1;
-	callRecursive(i, j);
-   check(i,j,1, 67);
-	printi(i); printc(' '); printi(j); printc('\\n');
-
-	// Test 3 : Miscellaneous
-	ausgabe(3);
-
-   // Compound and Empty-Statement
-	{ ; ; ; }
-
-	i:=0;
-	// While-Loop
-	while (i<=3) {
-		j:= 2*i+1;
-		k[i]:=j*(((((j+j)*j)+j*(j+(j*(j+j)))))/j/j);
-      k[0]:=k[0]+k[i];
-		printi(i); printc(' '); printi(k[i]); printc('\\n');
-		i:=i+1;
-	}
-   check(i,k[0], 4, 221);
-
-	// nested if-then-else
-	i:=0; j:=1;
-	if (i=j)
-		if (i # j-1) {
-          printc('e'); printc('r'); printc('r'); printc('o'); printc('r');}
-		else {printc('e'); printc('r'); printc('r'); printc('o'); printc('r');}
-	else { printc('o'); printc('k');  ;}
-	printc('\\n');
-
-	// Last test to check the correct framesize
-	ausgabe(4);
-	manyargs(1, 3, t, j);
-	printc('\\n');
-}
-
-proc ausgabe (nummer : int) {
-	printc(0x0A);    // newline
-	printc('T'); printc('e');printc('s');printc('t');printc(' '); printi(nummer); printc(10);      // newline
-	printc('='); printc('='); printc('='); printc('='); printc('='); printc('='); printc('='); printc('=');
-   printc(10);
-}
-
-proc check(i: int, j: int, expectedI : int, expectedJ : int) {
-   if (i # expectedI)
-         error(i, expectedI);
-   if (j # expectedJ)
-         error(j, expectedJ);
-}
-
-proc error(i : int, expectedI : int) {
-   printc('E');printc('r');printc('r');printc('o');printc('r');printc(':');
-   printc('i'); printc('=');printi(i); printc(',');
-   printc('E');printc('x');printc('p');printc('e');printc('c');printc('t');printc('e');printc('d');printc(':');
-   printi(expectedI);
-   printc(10);
-}
-      "
-  let table <- TableBuilder.buildSymbolTable ast
-  SemanticAnalysis.checkProgram ast table
+  //readi(x);
+  x := 3;
+  //readi(y);
+  y := 5;
+  printi(x + y);
+  printc('\n');
+}"

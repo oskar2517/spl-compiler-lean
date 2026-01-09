@@ -1,0 +1,28 @@
+
+
+proc p(x: int, y: int, ref z: int) {
+  var i: int;
+  var j: int;
+  while (j < 100) {
+  j := j + i;
+  i := 0;
+  while (i < 100) {
+    z := x + y;
+    i := i + 1;
+  }
+
+
+  }
+}
+
+proc main() {
+  var a: int;
+  var b: int;
+  var c: int;
+
+  a := 1;
+  b := 1;
+  p(a, b, c);
+  printi(c);
+
+}
