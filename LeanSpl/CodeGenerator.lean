@@ -109,7 +109,7 @@ mutual
         let variableExpressionRegister <- currentRegister
 
         let target <- freshRegister
-        let ins := IR.Instruction.load target variableExpressionRegister
+        let ins := IR.Instruction.load target IR.LLVMType.i64 variableExpressionRegister
 
         pure <| variableInstructions ++ [IR.BodyElement.instruction ins]
 
@@ -125,7 +125,7 @@ mutual
           let value := (IR.Register.mk name).addr
 
           if (ve.is_ref)
-            then pure <| [IR.BodyElement.instruction <| IR.Instruction.load target value]
+            then pure <| [IR.BodyElement.instruction <| IR.Instruction.load target (IR.LLVMType.ref IR.LLVMType.i64) value]
             else pure <| [IR.BodyElement.instruction <| IR.Instruction.getelementptr_nop target value]
         | _ => panic! s!"Internal Error: Expected variable entry"
       | _ => panic! s!"Internal Error: Symbol {name} not defined"
@@ -316,11 +316,29 @@ def compileProgram (p : Absyn.Program) (table : Table.SymbolTable) : GenM IR.Pro
       | .procedure d => some d
       | _            => none)
 
+  let main : IR.Function := {
+    name := ⟨"main"⟩
+    parameters := [],
+    body := [
+      IR.BodyElement.label <| IR.Label.mk "entry" true,
+      IR.BodyElement.instruction <| IR.Instruction.call ⟨"main"⟩ [],
+      IR.BodyElement.instruction <| IR.Instruction.ret_null
+    ]
+  }
+
   let functions <- procDefs.mapM (fun d => compileProcDef d table)
+  let declarations : List IR.Declaration :=
+    table.builtinProcedures.map (fun (procName, pe) =>
+      { name := IR.Global.mk procName
+        parameters := pe.parameters.reverse.map (fun p =>
+          if p.is_ref then
+            IR.LLVMType.ref (convertTypeToLLVM p.typ)
+          else
+            convertTypeToLLVM p.typ) })
 
   pure {
-    declarations := [],
-    functions := functions
+    declarations := declarations,
+    functions := main :: functions
   }
 
 end CodeGenerator

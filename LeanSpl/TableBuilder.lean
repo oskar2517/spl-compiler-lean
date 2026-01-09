@@ -36,7 +36,7 @@ def enterProcDef (proc : Absyn.ProcDef) (table: Table.SymbolTable) : Except Stri
     for var in proc.variables do
         localTable <- enterVarDef var localTable table
 
-    let entry <- pure <| Table.Entry.proc ⟨ localTable, params ⟩
+    let entry <- pure <| Table.Entry.proc ⟨ localTable, params, false ⟩
 
     Table.SymbolTable.enter table proc.name entry
 
@@ -53,31 +53,31 @@ def enterGlobalDefinition (definition: Absyn.GlobalDef) (table: Table.SymbolTabl
 
 def initTable : Table.SymbolTable :=
     ⟨ [
-        ("printi", Table.Entry.proc ⟨ ⟨ [] ⟩, [⟨ "i", Table.SplType.primitive Table.PrimitiveType.int, false ⟩] ⟩),
-        ("printc", Table.Entry.proc ⟨ ⟨ [] ⟩, [⟨ "c", Table.SplType.primitive Table.PrimitiveType.int, false ⟩] ⟩),
-        ("readi", Table.Entry.proc ⟨ ⟨ [] ⟩, [⟨ "i", Table.SplType.primitive Table.PrimitiveType.int, true ⟩] ⟩),
-        ("readc", Table.Entry.proc ⟨ ⟨ [] ⟩, [⟨ "c", Table.SplType.primitive Table.PrimitiveType.int, true ⟩] ⟩),
-        ("exit", Table.Entry.proc ⟨ ⟨ [] ⟩, [] ⟩),
-        ("time", Table.Entry.proc ⟨ ⟨ [] ⟩, [⟨ "t", Table.SplType.primitive Table.PrimitiveType.int, true ⟩] ⟩),
-        ("clearAll", Table.Entry.proc ⟨ ⟨ [] ⟩, [⟨ "c", Table.SplType.primitive Table.PrimitiveType.int, false ⟩] ⟩),
+        ("printi", Table.Entry.proc ⟨ ⟨ [] ⟩, [⟨ "i", Table.SplType.primitive Table.PrimitiveType.int, false ⟩], true ⟩),
+        ("printc", Table.Entry.proc ⟨ ⟨ [] ⟩, [⟨ "c", Table.SplType.primitive Table.PrimitiveType.int, false ⟩], true ⟩),
+        ("readi", Table.Entry.proc ⟨ ⟨ [] ⟩, [⟨ "i", Table.SplType.primitive Table.PrimitiveType.int, true ⟩], true ⟩),
+        ("readc", Table.Entry.proc ⟨ ⟨ [] ⟩, [⟨ "c", Table.SplType.primitive Table.PrimitiveType.int, true ⟩], true ⟩),
+        ("exit", Table.Entry.proc ⟨ ⟨ [] ⟩, [], true ⟩),
+        ("time", Table.Entry.proc ⟨ ⟨ [] ⟩, [⟨ "t", Table.SplType.primitive Table.PrimitiveType.int, true ⟩], true ⟩),
+        ("clearAll", Table.Entry.proc ⟨ ⟨ [] ⟩, [⟨ "c", Table.SplType.primitive Table.PrimitiveType.int, false ⟩], true ⟩),
         ("setPixel", Table.Entry.proc ⟨ ⟨ [] ⟩, [
             ⟨ "a", Table.SplType.primitive Table.PrimitiveType.int, false ⟩,
             ⟨ "b", Table.SplType.primitive Table.PrimitiveType.int, false ⟩,
             ⟨ "c", Table.SplType.primitive Table.PrimitiveType.int, false ⟩,
-        ] ⟩),
+        ], true ⟩),
         ("drawLine", Table.Entry.proc ⟨ ⟨ [] ⟩, [
             ⟨ "a", Table.SplType.primitive Table.PrimitiveType.int, false ⟩,
             ⟨ "b", Table.SplType.primitive Table.PrimitiveType.int, false ⟩,
             ⟨ "c", Table.SplType.primitive Table.PrimitiveType.int, false ⟩,
             ⟨ "d", Table.SplType.primitive Table.PrimitiveType.int, false ⟩,
             ⟨ "e", Table.SplType.primitive Table.PrimitiveType.int, false ⟩,
-        ] ⟩),
+        ], true ⟩),
         ("drawCircle", Table.Entry.proc ⟨ ⟨ [] ⟩, [
             ⟨ "a", Table.SplType.primitive Table.PrimitiveType.int, false ⟩,
             ⟨ "b", Table.SplType.primitive Table.PrimitiveType.int, false ⟩,
             ⟨ "c", Table.SplType.primitive Table.PrimitiveType.int, false ⟩,
             ⟨ "d", Table.SplType.primitive Table.PrimitiveType.int, false ⟩,
-        ] ⟩),
+        ], true⟩),
         ("int", Table.Entry.type ⟨ Table.SplType.primitive Table.PrimitiveType.int  ⟩ )
     ] ⟩
 

@@ -25,7 +25,7 @@ instance : ToString Label where
   toString l := if l.raw then l.name else s!"%L{l.name}"
 
 def Label.definition (l : Label) : String :=
-  s!"{l}:"
+  if l.raw then s!"{l.name}:" else s!"L{l.name}:"
 
 structure Register where
   name: String
@@ -75,7 +75,7 @@ inductive Instruction where
   | getelementptr (target : Register) (type : LLVMType) (base offset : Register)
   | getelementptr_nop (target : Register) (address : Register)
   | store (type : LLVMType) (value : Register) (address : Register)
-  | load (target: Register) (address : Register)
+  | load (target: Register) (type : LLVMType) (address : Register)
   | br_con (condition : Register) (label_then : Label) (label_else : Label)
   | br (label: Label)
   | call (name : Global) (arguments : List Operand)
@@ -87,6 +87,7 @@ inductive Instruction where
   | sdiv (target : Register) (left right : Register)
   | alloca (target : Register) (type : LLVMType)
   | ret
+  | ret_null
   deriving Repr, Inhabited
 
 instance : ToString Instruction where
@@ -95,7 +96,7 @@ instance : ToString Instruction where
   | .getelementptr target type base offset => s!"{target} = getelementptr {type}, {type}* {base}, i64 0, i64 {offset}"
   | .getelementptr_nop target address => s!"{target} = getelementptr i64, i64* {address}, i64 0"
   | .store type value address => s!"store {type} {value}, {type}* {address}, align 8"
-  | .load target address => s!"{target} = load i64, i64* {address}"
+  | .load target type address => s!"{target} = load {type}, i64* {address}"
   | .br_con condition label_then label_else => s!"br i1 {condition}, label {label_then}, label {label_else}"
   | .br label => s!"br label {label}"
   | .call name arguments => s!"call void {name}({String.intercalate ", " (arguments.map ToString.toString)})"
@@ -107,6 +108,7 @@ instance : ToString Instruction where
   | .sdiv target left right => s!"{target} = sdiv i64 {left}, {right}"
   | .alloca target type => s!"{target} = alloca {type}, align 8"
   | .ret => "ret void"
+  | .ret_null => "ret i64 0"
 
 inductive BodyElement where
   | label (l : Label)
@@ -138,7 +140,7 @@ structure Declaration where
 instance : ToString Declaration where
   toString f :=
     let parameters := String.intercalate ", " (f.parameters.map ToString.toString)
-    s!"declare void {parameters}"
+    s!"declare void {f.name}({parameters})"
 
 inductive ProgramElement where
   | decl (d : Declaration)
