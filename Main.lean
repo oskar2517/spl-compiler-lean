@@ -1,6 +1,7 @@
 import LeanSpl.Parser
 import LeanSpl.SemanticAnalysis
 import LeanSpl.TableBuilder
+import LeanSpl.CodeGenerator
 
 def padString (w : Nat) (s : String) : String :=
   if s.length >= w then
@@ -21,7 +22,9 @@ def debugCompile (prog: String): IO Unit :=
     match Parser.parse prog with
             | Except.ok ast => match TableBuilder.buildSymbolTable ast with
                 | Except.ok table => match SemanticAnalysis.checkProgram ast table with
-                    | Except.ok _ => IO.println "no errors found"
+                    | Except.ok _ => do
+                        let (ir, _st) := (CodeGenerator.compileProgram ast table).run {}
+                        IO.println s!"{ir}"
                     | Except.error e => IO.println s!"merror: {e}"
                 | Except.error e => IO.println s!"merror: {e}"
             | Except.error e => IO.println s!"merror: {e}"
@@ -37,18 +40,10 @@ def main : IO Unit := do
         compile contents file.fileName
 
 
-#eval debugCompile "//
-// test1.spl -- Aufgabenblatt 2, Testprogramm a)
-//
-
+#eval debugCompile "
 proc main() {
-  var x: int;
-  var y: int;
+    var a: array[3] of int;
 
-  //readi(x);
-  x := 3;
-  //readi(y);
-  y := 5;
-  printi(x + y);
-  printc('\n');
-}"
+    a[2] := 3;
+}
+"

@@ -18,23 +18,24 @@ instance : ToString LLVMType where
 
 structure Label where
   name: String
-  deriving Repr
+  raw: Bool := false
+  deriving Repr, Inhabited
 
 instance : ToString Label where
-  toString l := s!"L{l.name}"
+  toString l := if l.raw then l.name else s!"L{l.name}"
 
 def Label.definition (l : Label) : String :=
   s!"{l}:"
 
 structure Register where
   name: String
-  deriving Repr
+  deriving Repr, Inhabited
 
 instance : ToString Register where
   toString r := s!"%{r.name}"
 
-def Register.addr (r : Register) : String :=
-  s!"{r}.addr"
+def Register.addr (r : Register) : Register :=
+  Register.mk <| r.name ++ ".addr"
 
 structure Global where
   name: String
@@ -71,31 +72,37 @@ instance : ToString Operand where
 
 inductive Instruction where
   | icmp (target : Register) (op : RelOp) (left right : Register)
-  | getelementptr (target : Register) (address : Register)
-  | store (value : Register) (address : Register)
+  | getelementptr (target : Register) (type : LLVMType) (base offset : Register)
+  | getelementptr_nop (target : Register) (address : Register)
+  | store (type : LLVMType) (value : Register) (address : Register)
   | load (target: Register) (address : Register)
   | br_con (condition : Register) (label_then : Label) (label_else : Label)
   | br (label: Label)
   | call (name : Global) (arguments : List Operand)
   | add (target : Register) (left right : Register)
+  | add_ld (target : Register) (right : Int)
   | sub (target : Register) (left right : Register)
+  | sub_imm (target : Register) (right : Register)
   | mul (target : Register) (left right : Register)
   | sdiv (target : Register) (left right : Register)
   | alloca (target : Register) (type : LLVMType)
   | ret
-  deriving Repr
+  deriving Repr, Inhabited
 
 instance : ToString Instruction where
   toString
   | .icmp target op left right => s!"{target} = icmp {op} i64 {left}, {right}"
-  | .getelementptr target address => s!"{target} = getelementptr i64, i64* {address}, i64 0"
-  | .store value address => s!"store i64 {value}, i64* {address}, i64 0"
+  | .getelementptr target type base offset => s!"{target} = getelementptr {type}, {type}* {base}, i64 0, i64 {offset}"
+  | .getelementptr_nop target address => s!"{target} = getelementptr i64, i64* {address}, i64 0"
+  | .store type value address => s!"store {type} {value}, {type}* {address}, align 8"
   | .load target address => s!"{target} = load i64, i64* {address}"
   | .br_con condition label_then label_else => s!"br i1 {condition}, label {label_then}, label {label_else}"
   | .br label => s!"br label {label}"
   | .call name arguments => s!"call void {name}({String.intercalate ", " (arguments.map ToString.toString)})"
   | .add target left right => s!"{target} = add i64 {left}, {right}"
+  | .add_ld target right => s!"{target} = add i64 0, {right}"
   | .sub target left right => s!"{target} = sub i64 {left}, {right}"
+  | .sub_imm target right => s!"{target} = sub i64 0, {right}"
   | .mul target left right => s!"{target} = mul i64 {left}, {right}"
   | .sdiv target left right => s!"{target} = sdiv i64 {left}, {right}"
   | .alloca target type => s!"{target} = alloca {type}, align 8"
@@ -113,7 +120,7 @@ instance : ToString BodyElement where
 
 structure Function where
   name: Global
-  parameters: List LLVMType
+  parameters: List Operand
   body: List BodyElement
   deriving Repr, Inhabited
 
@@ -121,7 +128,7 @@ instance : ToString Function where
   toString f :=
     let parameters := String.intercalate ", " (f.parameters.map ToString.toString)
     let body := String.intercalate "\n" (f.body.map ToString.toString)
-    s!"define void {f.name}({parameters})" ++ "{\n" ++ body ++ "}\n"
+    s!"define void {f.name}({parameters}) " ++ "{\n" ++ body ++ "\n}\n"
 
 structure Declaration where
   name: Global
