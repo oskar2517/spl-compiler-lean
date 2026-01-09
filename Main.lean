@@ -42,8 +42,10 @@ def main : IO Unit := do
 
 #eval debugCompile "
 proc main() {
-    var a: array[3] of int;
+    while (1 = 1) {
+        printi(1);
+        printi(2);
+        }
 
-    a[2] := 3;
 }
 "

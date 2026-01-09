@@ -22,7 +22,7 @@ structure Label where
   deriving Repr, Inhabited
 
 instance : ToString Label where
-  toString l := if l.raw then l.name else s!"L{l.name}"
+  toString l := if l.raw then l.name else s!"%L{l.name}"
 
 def Label.definition (l : Label) : String :=
   s!"{l}:"
@@ -65,7 +65,7 @@ instance : ToString RelOp where
 structure Operand where
   type: LLVMType
   register: Register
-  deriving Repr
+  deriving Repr, Inhabited
 
 instance : ToString Operand where
   toString o := s!"{o.type} {o.register}"
