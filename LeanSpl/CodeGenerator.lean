@@ -319,12 +319,12 @@ def compileProgram (p : Absyn.Program) (table : Table.SymbolTable) : GenM IR.Pro
 
   let main : IR.Function := {
     name := ⟨"main", true⟩
-    type := IR.LLVMType.i64
+    type := IR.LLVMType.i32
     parameters := [],
     body := [
       IR.BodyElement.label <| IR.Label.mk "entry" true,
       IR.BodyElement.instruction <| IR.Instruction.call ⟨"main", false⟩ [],
-      IR.BodyElement.instruction <| IR.Instruction.ret_null
+      IR.BodyElement.instruction <| IR.Instruction.ret_null IR.LLVMType.i32
     ]
   }
 

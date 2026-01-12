@@ -2,6 +2,7 @@ namespace IR
 
 inductive LLVMType where
   | i64
+  | i32
   | i1
   | arr (size : Nat) (base : LLVMType)
   | ref (base : LLVMType)
@@ -10,6 +11,7 @@ inductive LLVMType where
 
 def LLVMType.toString : LLVMType -> String
   | .i64 => "i64"
+  | .i32 => "i32"
   | .i1 => "i1"
   | .arr size base => s!"[{size} x {LLVMType.toString base}]"
   | .ref base => s!"{LLVMType.toString base}*"
@@ -90,7 +92,7 @@ inductive Instruction where
   | sdiv (target : Register) (left right : Register)
   | alloca (target : Register) (type : LLVMType)
   | ret
-  | ret_null
+  | ret_null (type : LLVMType)
   deriving Repr, Inhabited
 
 instance : ToString Instruction where
@@ -111,7 +113,7 @@ instance : ToString Instruction where
   | .sdiv target left right => s!"{target} = sdiv i64 {left}, {right}"
   | .alloca target type => s!"{target} = alloca {type}, align 8"
   | .ret => "ret void"
-  | .ret_null => "ret i64 0"
+  | .ret_null type => s!"ret {type} 0"
 
 inductive BodyElement where
   | label (l : Label)
