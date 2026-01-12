@@ -323,7 +323,10 @@ def compileProgram (p : Absyn.Program) (table : Table.SymbolTable) : GenM IR.Pro
     parameters := [],
     body := [
       IR.BodyElement.label <| IR.Label.mk "entry" true,
+      IR.BodyElement.instruction <| IR.Instruction.call ⟨"__init_time", true⟩ [],
+      IR.BodyElement.instruction <| IR.Instruction.call ⟨"__sdl_init_screen", true⟩ [],
       IR.BodyElement.instruction <| IR.Instruction.call ⟨"main", false⟩ [],
+      IR.BodyElement.instruction <| IR.Instruction.call ⟨"__sdl_event_loop", true⟩ [],
       IR.BodyElement.instruction <| IR.Instruction.ret_null IR.LLVMType.i32
     ]
   }
@@ -337,6 +340,12 @@ def compileProgram (p : Absyn.Program) (table : Table.SymbolTable) : GenM IR.Pro
             IR.LLVMType.ref (convertTypeToLLVM p.typ)
           else
             convertTypeToLLVM p.typ) })
+
+  let declarations := declarations ++ [
+    ⟨⟨"__init_time", true⟩, []⟩,
+    ⟨⟨"__sdl_init_screen", true⟩, []⟩,
+    ⟨⟨"__sdl_event_loop", true⟩, []⟩
+  ]
 
   pure {
     declarations := declarations,
