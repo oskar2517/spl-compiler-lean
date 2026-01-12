@@ -5,6 +5,7 @@ inductive LLVMType where
   | i1
   | arr (size : Nat) (base : LLVMType)
   | ref (base : LLVMType)
+  | void
   deriving Repr, Inhabited
 
 def LLVMType.toString : LLVMType -> String
@@ -12,6 +13,7 @@ def LLVMType.toString : LLVMType -> String
   | .i1 => "i1"
   | .arr size base => s!"[{size} x {LLVMType.toString base}]"
   | .ref base => s!"{LLVMType.toString base}*"
+  | .void => "void"
 
 instance : ToString LLVMType where
   toString := LLVMType.toString
@@ -39,10 +41,11 @@ def Register.addr (r : Register) : Register :=
 
 structure Global where
   name: String
+  raw: Bool
   deriving Repr, Inhabited
 
 instance : ToString Global where
-  toString g := s!"@_{g.name}"
+  toString g := if g.raw then s!"@{g.name}" else s!"@_{g.name}"
 
 inductive RelOp where
   | eq
@@ -122,6 +125,7 @@ instance : ToString BodyElement where
 
 structure Function where
   name: Global
+  type: LLVMType
   parameters: List Operand
   body: List BodyElement
   deriving Repr, Inhabited
@@ -130,7 +134,7 @@ instance : ToString Function where
   toString f :=
     let parameters := String.intercalate ", " (f.parameters.map ToString.toString)
     let body := String.intercalate "\n" (f.body.map ToString.toString)
-    s!"define void {f.name}({parameters}) " ++ "{\n" ++ body ++ "\n}\n"
+    s!"define {f.type} {f.name}({parameters}) " ++ "{\n" ++ body ++ "\n}\n"
 
 structure Declaration where
   name: Global

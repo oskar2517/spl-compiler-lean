@@ -190,7 +190,7 @@ def compileCallStmt
 
       let argInstrs := argPairs.foldr (fun (instrs, _) acc => instrs ++ acc) []
       let argOps := argPairs.map (fun (_, op) => op)
-      let callElem := IR.BodyElement.instruction <| IR.Instruction.call (IR.Global.mk name) argOps
+      let callElem := IR.BodyElement.instruction <| IR.Instruction.call (IR.Global.mk name false) argOps
 
       pure (argInstrs ++ [callElem])
   | some _ => panic! s!"Internal Error: Expected procedure entry for {name}"
@@ -303,7 +303,8 @@ def compileProcDef (d : Absyn.ProcDef) (table : Table.SymbolTable) : GenM IR.Fun
       let body := body ++ [IR.BodyElement.instruction IR.Instruction.ret]
 
       pure {
-        name := IR.Global.mk d.name
+        name := IR.Global.mk d.name false
+        type := IR.LLVMType.void
         parameters := parameters
         body := body
       }
@@ -317,11 +318,12 @@ def compileProgram (p : Absyn.Program) (table : Table.SymbolTable) : GenM IR.Pro
       | _            => none)
 
   let main : IR.Function := {
-    name := ⟨"main"⟩
+    name := ⟨"main", true⟩
+    type := IR.LLVMType.i64
     parameters := [],
     body := [
       IR.BodyElement.label <| IR.Label.mk "entry" true,
-      IR.BodyElement.instruction <| IR.Instruction.call ⟨"main"⟩ [],
+      IR.BodyElement.instruction <| IR.Instruction.call ⟨"main", false⟩ [],
       IR.BodyElement.instruction <| IR.Instruction.ret_null
     ]
   }
@@ -329,7 +331,7 @@ def compileProgram (p : Absyn.Program) (table : Table.SymbolTable) : GenM IR.Pro
   let functions <- procDefs.mapM (fun d => compileProcDef d table)
   let declarations : List IR.Declaration :=
     table.builtinProcedures.map (fun (procName, pe) =>
-      { name := IR.Global.mk procName
+      { name := IR.Global.mk procName false
         parameters := pe.parameters.reverse.map (fun p =>
           if p.is_ref then
             IR.LLVMType.ref (convertTypeToLLVM p.typ)
