@@ -75,7 +75,7 @@ namespace Expr
 
   def isVariable (expr: Expr) : Bool :=
     match expr with
-      | Expr.var _ => true
+      | .var _ => true
       | _ => false
 
 end Expr
@@ -84,8 +84,8 @@ namespace BinOp
 
   def operatorType (op: BinOp) : Table.SplType :=
     match op with
-      | BinOp.add | BinOp.div | BinOp.mul | BinOp.sub => Table.SplType.primitive Table.PrimitiveType.int
-      | _ => Table.SplType.primitive Table.PrimitiveType.bool
+      | .add | .div | .mul | .sub => .primitive .int
+      | _ => .primitive .bool
 
 end BinOp
 

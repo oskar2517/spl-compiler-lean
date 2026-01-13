@@ -14,13 +14,13 @@ deriving Repr, Inhabited
 abbrev GenM := StateM GenState
 
 def freshLabel : GenM IR.Label := do
-  let s <- get
+  let s ← get
   let l := IR.Label.mk (toString s.nextLabel) false
   set { s with nextLabel := s.nextLabel + 1 }
   return l
 
 def freshRegister : GenM IR.Register := do
-  let s <- get
+  let s ← get
   let r : IR.Register := ⟨s!"{s.nextRegister}"⟩
   set { s with
     nextRegister := s.nextRegister + 1
@@ -29,7 +29,7 @@ def freshRegister : GenM IR.Register := do
   return r
 
 def currentRegister : GenM IR.Register := do
-  return (<- get).currentRegister
+  return (← get).currentRegister
 
 partial def convertTypeToLLVM : Table.SplType -> IR.LLVMType
   | .primitive .int  => .i64
@@ -77,16 +77,16 @@ mutual
   def compileExpression (expr : Absyn.Expr) (table : Table.SymbolTable) (localTable : Table.SymbolTable) : GenM (List IR.BodyElement) := do
     match expr with
       | .int n =>
-        let target <- freshRegister
+        let target ← freshRegister
         pure <| [IR.BodyElement.instruction <| IR.Instruction.add_ld target n]
       | .bin op left right =>
-        let leftInstructions <- compileExpression left table localTable
-        let leftRegister <- currentRegister
+        let leftInstructions ← compileExpression left table localTable
+        let leftRegister ← currentRegister
 
-        let rightInstructions <- compileExpression right table localTable
-        let rightRegister <- currentRegister
+        let rightInstructions ← compileExpression right table localTable
+        let rightRegister ← currentRegister
 
-        let target <- freshRegister
+        let target ← freshRegister
 
         let ins := match op with
           | .add => IR.Instruction.add target leftRegister rightRegister
@@ -97,18 +97,18 @@ mutual
 
         pure <| leftInstructions ++ rightInstructions ++ [IR.BodyElement.instruction ins]
       | .un _ operand =>
-        let operandInstructions <- compileExpression operand table localTable
-        let operandRegister <- currentRegister
+        let operandInstructions ← compileExpression operand table localTable
+        let operandRegister ← currentRegister
 
-        let target <- freshRegister
+        let target ← freshRegister
         let ins := IR.Instruction.sub_imm target operandRegister
 
         pure <| operandInstructions ++ [IR.BodyElement.instruction ins]
       | .var var =>
-        let variableInstructions <- compileVariable var table localTable
-        let variableExpressionRegister <- currentRegister
+        let variableInstructions ← compileVariable var table localTable
+        let variableExpressionRegister ← currentRegister
 
-        let target <- freshRegister
+        let target ← freshRegister
         let ins := IR.Instruction.load target IR.LLVMType.i64 variableExpressionRegister
 
         pure <| variableInstructions ++ [IR.BodyElement.instruction ins]
@@ -121,7 +121,7 @@ mutual
       match entry with
       | some e => match e with
         | .var ve =>
-          let target <- freshRegister
+          let target ← freshRegister
           let value := (IR.Register.mk name).addr
 
           if (ve.is_ref)
@@ -135,13 +135,13 @@ mutual
         | .ok ty =>
           let convertedType := convertTypeToLLVM ty
 
-          let arrayInstructions <- compileVariable array table localTable
-          let arrayRegister <- currentRegister
+          let arrayInstructions ← compileVariable array table localTable
+          let arrayRegister ← currentRegister
 
-          let indexInstructions <- compileExpression index table localTable
-          let indexRegister <- currentRegister
+          let indexInstructions ← compileExpression index table localTable
+          let indexRegister ← currentRegister
 
-          let target <- freshRegister
+          let target ← freshRegister
 
           let ins := IR.Instruction.getelementptr target convertedType arrayRegister indexRegister
 
@@ -151,11 +151,11 @@ mutual
 end
 
 def compileAssignStmt (target : Absyn.Variable) (value : Absyn.Expr) (table : Table.SymbolTable) (localTable : Table.SymbolTable) : GenM (List IR.BodyElement) := do
-  let variableInstructions <- compileVariable target table localTable
-  let addressRegister <- currentRegister
+  let variableInstructions ← compileVariable target table localTable
+  let addressRegister ← currentRegister
 
-  let valueInstructions <- compileExpression value table localTable
-  let valueRegister <- currentRegister
+  let valueInstructions ← compileExpression value table localTable
+  let valueRegister ← currentRegister
 
   let storeInstruction := IR.Instruction.store IR.LLVMType.i64 valueRegister addressRegister
 
@@ -171,19 +171,19 @@ def compileCallStmt
   match entry with
   | some (.proc pe) =>
       let zipped := arguments.zip pe.parameters.reverse
-      let argPairs <- zipped.mapM (fun (a, p) => do
+      let argPairs ← zipped.mapM (fun (a, p) => do
         if p.is_ref then
           match a with
           | .var v => do
-              let instructions <- compileVariable v table localTable
-              let r <- currentRegister
+              let instructions ← compileVariable v table localTable
+              let r ← currentRegister
               let ty := IR.LLVMType.ref (convertTypeToLLVM p.typ)
               pure (instructions, IR.Operand.mk ty r)
           | _ =>
               panic! "Internal error: ref parameter expects variable argument"
         else do
-          let instructions <- compileExpression a table localTable
-          let r <- currentRegister
+          let instructions ← compileExpression a table localTable
+          let r ← currentRegister
           let ty := convertTypeToLLVM p.typ
           pure (instructions, IR.Operand.mk ty r)
       )
@@ -205,13 +205,13 @@ def generateCondition
 
   match condition with
   | Absyn.Expr.bin op left right =>
-    let leftInstructions <- compileExpression left table localTable
-    let leftRegister <- currentRegister
+    let leftInstructions ← compileExpression left table localTable
+    let leftRegister ← currentRegister
 
-    let rightInstructions <- compileExpression right table localTable
-    let rightRegister <- currentRegister
+    let rightInstructions ← compileExpression right table localTable
+    let rightRegister ← currentRegister
 
-    let target <- freshRegister
+    let target ← freshRegister
 
     let cmpIns := match op with
       | .eq => IR.Instruction.icmp target IR.RelOp.eq leftRegister rightRegister
@@ -236,16 +236,16 @@ mutual
     (table : Table.SymbolTable)
     (localTable : Table.SymbolTable) : GenM (List IR.BodyElement) := do
 
-    let thenLabel <- freshLabel
-    let elseLabel <- freshLabel
-    let mergeLabel <- freshLabel
+    let thenLabel ← freshLabel
+    let elseLabel ← freshLabel
+    let mergeLabel ← freshLabel
 
-    let condInstructions <- generateCondition condition thenLabel elseLabel table localTable
+    let condInstructions ← generateCondition condition thenLabel elseLabel table localTable
 
-    let thenInstructions <- compileStatement table localTable thenBranch
+    let thenInstructions ← compileStatement table localTable thenBranch
     let brThenIns := IR.Instruction.br mergeLabel
 
-    let elseInstructions <- match elseBranch with
+    let elseInstructions ← match elseBranch with
       | some b => compileStatement table localTable b
       | _ => pure []
     let brElseIns := IR.Instruction.br mergeLabel
@@ -260,15 +260,15 @@ mutual
     (table : Table.SymbolTable)
     (localTable : Table.SymbolTable) : GenM (List IR.BodyElement) := do
 
-    let condLabel <- freshLabel
-    let bodyLabel <- freshLabel
-    let endLabel <- freshLabel
+    let condLabel ← freshLabel
+    let bodyLabel ← freshLabel
+    let endLabel ← freshLabel
 
     let condBrIns := IR.Instruction.br condLabel
 
-    let condInstructions <- generateCondition condition bodyLabel endLabel table localTable
+    let condInstructions ← generateCondition condition bodyLabel endLabel table localTable
 
-    let bodyInstructions <- compileStatement table localTable body
+    let bodyInstructions ← compileStatement table localTable body
 
     pure <| [IR.BodyElement.instruction condBrIns, IR.BodyElement.label condLabel] ++ condInstructions
     ++ [IR.BodyElement.label bodyLabel] ++ bodyInstructions ++ [IR.BodyElement.instruction condBrIns, IR.BodyElement.label endLabel]
@@ -297,7 +297,7 @@ def compileProcDef (d : Absyn.ProcDef) (table : Table.SymbolTable) : GenM IR.Fun
       let body := body ++ (wrapInstructions <| initializeParameters pe.parameters.reverse)
       let body := body ++ (wrapInstructions <| initializeVariables d pe.local_table)
 
-      let stmtLists <- d.body.mapM (compileStatement table pe.local_table)
+      let stmtLists ← d.body.mapM (compileStatement table pe.local_table)
       let body := body ++ stmtLists.foldr (· ++ ·) []
 
       let body := body ++ [IR.BodyElement.instruction IR.Instruction.ret]
@@ -331,7 +331,7 @@ def compileProgram (p : Absyn.Program) (table : Table.SymbolTable) : GenM IR.Pro
     ]
   }
 
-  let functions <- procDefs.mapM (fun d => compileProcDef d table)
+  let functions ← procDefs.mapM (fun d => compileProcDef d table)
   let declarations : List IR.Declaration :=
     table.builtinProcedures.map (fun (procName, pe) =>
       { name := IR.Global.mk procName false

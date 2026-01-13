@@ -33,13 +33,13 @@ def sepBy {α} (p : Parser α) (sep : Parser Unit) : Parser (List α) :=
   sepBy1 p sep <|> pure []
 
 partial def chainl1 (p : Parser α) (op : Parser (α -> α -> α)) : Parser α := do
-  let mut x <- p
+  let mut x ← p
   repeat do
-    let r <- attempt (some <$> op) <|> pure none
+    let r ← attempt (some <$> op) <|> pure none
     match r with
     | none => return x
     | some f =>
-      let y <- p
+      let y ← p
       x := f x y
   unreachable!
 
@@ -49,8 +49,8 @@ def isKeyword (s : String) : Bool :=
   s == "array" || s == "of" || s == "ref"
 
 def ident : Parser String := do
-  let first <- asciiLetter <|> pchar '_'
-  let later <- manyChars (asciiLetter <|> pchar '_' <|> digit)
+  let first ← asciiLetter <|> pchar '_'
+  let later ← manyChars (asciiLetter <|> pchar '_' <|> digit)
   let s :=  first.toString ++ later
   if isKeyword s then
     fail s!"keyword '{s}' cannot be used as identifier"
@@ -59,24 +59,24 @@ def ident : Parser String := do
 
 def charLiteral : Parser Int := do
   skipChar '\''
-  let char <- take 1
+  let char ← take 1
   skipChar '\''
   pure char.front.toNat
 
 def charNewLine : Parser Int := do
-  let _ <- pstring "'\\n'"
+  let _ ← pstring "'\\n'"
   pure '\n'.toNat
 
 def character : Parser Int := attempt charNewLine <|> charLiteral
 
 def decInteger : Parser Int := do
-  let digitsStr <- many1Chars digit
+  let digitsStr ← many1Chars digit
   let n := digitsStr.toInt!
   pure n
 
 def hexInteger : Parser Int := do
   skipString "0x"
-  let cs <- many1 hexDigit
+  let cs ← many1 hexDigit
   let ds := cs.map (fun d =>
     if d.isDigit then
       d.toNat - '0'.toNat
@@ -90,17 +90,17 @@ def integer : Parser Int := attempt hexInteger <|> decInteger
 def intlit : Parser Int := integer <|> character
 
 def namedTypeExpr : Parser TypeExpr := do
-  let id <- lexeme ident
+  let id ← lexeme ident
   pure <| TypeExpr.named id
 
 mutual
   partial def arrayTypeExpr : Parser TypeExpr := do
     symbol "array"
     symbol "["
-    let len <- lexeme intlit
+    let len ← lexeme intlit
     symbol "]"
     symbol "of"
-    let te <- typeExpr
+    let te ← typeExpr
     pure <| TypeExpr.array (len.toNat) te
 
   partial def typeExpr : Parser TypeExpr := arrayTypeExpr <|> namedTypeExpr
@@ -108,15 +108,15 @@ end
 
 def refParam : Parser ParamDef := do
   symbol "ref"
-  let id <- lexeme ident
+  let id ← lexeme ident
   symbol ":"
-  let te <- typeExpr
+  let te ← typeExpr
   pure <| ParamDef.mk id te true
 
 def nonRefParam : Parser ParamDef := do
-  let id <- lexeme ident
+  let id ← lexeme ident
   symbol ":"
-  let te <- typeExpr
+  let te ← typeExpr
   pure <| ParamDef.mk id te false
 
 def parameter : Parser ParamDef := refParam <|> nonRefParam
@@ -144,11 +144,11 @@ def mul : Parser BinOp := symbol "*" *> pure BinOp.mul
 def div : Parser BinOp := symbol "/" *> pure BinOp.div
 
 def intExpr : Parser Expr := do
-  let i <- lexeme intlit
+  let i ← lexeme intlit
   pure <| Expr.int i
 
 def namedVariable : Parser Variable := do
-  let id <- lexeme ident
+  let id ← lexeme ident
   pure <| Variable.named id
 
 partial def expr2Op : Parser (Expr -> Expr -> Expr) :=
@@ -161,22 +161,22 @@ partial def expr1Op : Parser (Expr -> Expr -> Expr) :=
 
 mutual
   partial def indexedVariable : Parser Variable := do
-    let base <- namedVariable
-    let arr <- many (do
+    let base ← namedVariable
+    let arr ← many (do
       symbol "["
-      let ex <- expr
+      let ex ← expr
       symbol "]"
       pure ex
     )
     pure <| arr.foldl (fun var e => Variable.index var e) base
 
   partial def variableExpr : Parser Expr := do
-    let var <- indexedVariable
+    let var ← indexedVariable
     pure <| Expr.var var
 
   partial def parenthesisExpr : Parser Expr := do
     symbol "("
-    let ex <- expr
+    let ex ← expr
     symbol ")"
     pure ex
 
@@ -185,7 +185,7 @@ mutual
   partial def expr3 : Parser Expr :=
     (do
       symbol "-"
-      let ex <- expr3
+      let ex ← expr3
       pure <| Expr.un UnOp.neg ex
     ) <|> expr4
 
@@ -194,10 +194,10 @@ mutual
   partial def expr1 : Parser Expr := chainl1 expr2 expr1Op
 
   partial def expr0 : Parser Expr := do
-    let left <- expr1
+    let left ← expr1
     attempt (do
-      let op <- le <|> lt <|> ge <|> gt <|> eq <|> ne
-      let right <- expr1 -- No-assoc
+      let op ← le <|> lt <|> ge <|> gt <|> eq <|> ne
+      let right ← expr1 -- No-assoc
       pure <| Expr.bin op left right
     ) <|> pure left
 
@@ -211,9 +211,9 @@ def emptyStatement : Parser Stmt := do
   pure Stmt.empty
 
 def callStatement : Parser Stmt := do
-  let id <- lexeme ident
+  let id ← lexeme ident
   symbol "("
-  let args <- argumentList
+  let args ← argumentList
   symbol ")"
   symbol ";"
   pure <| Stmt.call id args
@@ -229,23 +229,23 @@ mutual
     pure <| Stmt.if_ c t e
 
   partial def assignStatement : Parser Stmt := do
-    let var <- indexedVariable
+    let var ← indexedVariable
     symbol ":="
-    let ex <- expr
+    let ex ← expr
     symbol ";"
     pure <| Stmt.assign var ex
 
   partial def whileStatement : Parser Stmt := do
     symbol "while"
     symbol "("
-    let ex <- expr
+    let ex ← expr
     symbol ")"
-    let st <- statement
+    let st ← statement
     pure <| Stmt.while_ ex st
 
   partial def compoundStatement : Parser Stmt := do
     symbol "{"
-    let st <- many statement
+    let st ← many statement
     symbol "}"
     pure <| Stmt.block st.toList
 
@@ -256,29 +256,29 @@ end
 
 def variableDef : Parser VarDef := do
   symbol "var"
-  let name <- ident
+  let name ← ident
   symbol ":"
-  let te <- typeExpr
+  let te ← typeExpr
   symbol ";"
   pure <| VarDef.mk name te
 
 def procDef : Parser ProcDef := do
   symbol "proc"
-  let name <- ident
+  let name ← ident
   symbol "("
-  let params <- paramList
+  let params ← paramList
   symbol ")"
   symbol "{"
-  let vars <- many variableDef
-  let statements <- many statement
+  let vars ← many variableDef
+  let statements ← many statement
   symbol "}"
   pure <| ProcDef.mk name params vars.toList statements.toList
 
 def typeDef : Parser TypeDef := do
   symbol "type"
-  let id <- ident
+  let id ← ident
   symbol "="
-  let typeExpr <- typeExpr
+  let typeExpr ← typeExpr
   symbol ";"
   pure <| TypeDef.mk id typeExpr
 
@@ -289,12 +289,12 @@ def globalDef : Parser GlobalDef := do
 
 partial def globalDefList : Parser (List GlobalDef) := do
   whitespace
-  let defs <- many globalDef
+  let defs ← many globalDef
   eof
   pure defs.toList
 
 def program : Parser Program := do
-  let defs <- globalDefList
+  let defs ← globalDefList
   pure ⟨ defs ⟩
 
 def parse (s: String) : Except String Program :=

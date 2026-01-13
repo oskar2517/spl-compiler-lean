@@ -54,10 +54,10 @@ end
 namespace SymbolTable
 
   def enter (table : SymbolTable) (name : String) (entry : Entry) : Except String SymbolTable := do
-    let mut ent <- pure (name, entry)
+    let mut ent := (name, entry)
     for e in table.entries do
       if e.fst = name then
-        ent <- Except.error s!"{name} already exists"
+        ent <- .error s!"{name} already exists"
 
     pure ⟨ ent :: table.entries ⟩
 
@@ -83,8 +83,8 @@ namespace SplType
 
   def isArray (var: SplType) : Bool :=
     match var with
-      | SplType.arr _ => true
-      | SplType.primitive _ => false
+      | .arr _ => true
+      | .primitive _ => false
 
 end SplType
 
