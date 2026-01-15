@@ -34,7 +34,7 @@ mutual
 
           let _ ← if leftType != rightType then .error s!"operand type mismatch"
 
-          pure <| Absyn.BinOp.operatorType op
+          pure <| Absyn.BinOp.typ op
       | .un _ operand => do
           let operandType ← checkExpr operand table
           if operandType != (.primitive .int) then .error "operand for unary Minus must be int"
@@ -48,7 +48,7 @@ def checkAssignStmt (target: Absyn.Variable) (value: Absyn.Expr) (table: Table.S
   let targetType ← varType target table
   let valueType ← checkExpr value table
 
-  let _ ← if Table.SplType.isArray targetType || targetType != valueType then .error "target type does not match value type or you are trying to assign to an array"
+  let _ ← if targetType matches .arr _ || targetType != valueType then .error "target type does not match value type or you are trying to assign to an array"
 
 
 def checkCallStmt (name : String) (args: List Absyn.Expr) (table: Table.SymbolTable) (global: Table.SymbolTable): Except String Unit := do
@@ -66,7 +66,7 @@ def checkCallStmt (name : String) (args: List Absyn.Expr) (table: Table.SymbolTa
     | true => pure ()
     | false => .error s!"{name}: argument type mismatch"
 
-    let _ ← if p.is_ref && ¬ Absyn.Expr.isVariable arg then
+    let _ ← if p.is_ref && !(arg matches .var _) then
       .error "Argument to a reference parameter must be variable"
 
 mutual

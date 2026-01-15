@@ -11,6 +11,10 @@ inductive BinOp where
   | eq | ne | lt | le | gt | ge
    deriving Repr, DecidableEq
 
+def BinOp.typ : BinOp → Table.SplType
+  | .add | .sub | .mul | .div         => .primitive .int
+  | .eq | .ne | .lt | .le | .gt | .ge => .primitive .bool
+
 mutual
   inductive Expr : Type where
     | bin (op : BinOp) (left right : Expr)
@@ -70,23 +74,5 @@ inductive GlobalDef where
 structure Program where
   definitions: List GlobalDef
   deriving Repr
-
-namespace Expr
-
-  def isVariable (expr: Expr) : Bool :=
-    match expr with
-      | .var _ => true
-      | _ => false
-
-end Expr
-
-namespace BinOp
-
-  def operatorType (op: BinOp) : Table.SplType :=
-    match op with
-      | .add | .div | .mul | .sub => .primitive .int
-      | _ => .primitive .bool
-
-end BinOp
 
 end Absyn

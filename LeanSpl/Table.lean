@@ -75,13 +75,4 @@ namespace SymbolTable
 
 end SymbolTable
 
-namespace SplType
-
-  def isArray (var: SplType) : Bool :=
-    match var with
-      | .arr _ => true
-      | .primitive _ => false
-
-end SplType
-
 end Table
