@@ -5,11 +5,12 @@ namespace TableBuilder
 
 def typeFromTypeExpression (te : Absyn.TypeExpr) (table : Table.SymbolTable): Except String Table.SplType :=
     match te with
-        | Absyn.TypeExpr.named nte => match Table.SymbolTable.lookup table nte with
-            | some t => match t with
+        | Absyn.TypeExpr.named nte => do
+            let e <- table.lookup nte
+
+            match e with
                 | Table.Entry.type t => pure t.typ
                 | _ => .error s!"{nte} is not a type"
-            | none => .error s!"{nte} not found"
         | Absyn.TypeExpr.array size base => match typeFromTypeExpression base table with
             | .ok typ => pure <| Table.SplType.arr ⟨ typ, size ⟩
             | .error e => Except.error e

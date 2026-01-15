@@ -63,14 +63,11 @@ def initializeParameters (ps : List Table.Parameter) : List IR.Item :=
 def initializeVariables (d : Absyn.ProcDef) (localTable : Table.SymbolTable) : List IR.Item :=
   d.variables.map (fun v =>
     match localTable.lookup v.name with
-    | some (.var ve) =>
+    | .ok (.var ve) =>
         let r := (IR.Register.mk v.name).addr
         let ty := convertTypeToLLVM ve.typ
         alloca r ty
-    | some _ =>
-        panic! "Internal Error: Expected variable entry"
-    | none =>
-        panic! s!"Internal Error: Symbol {v.name} not defined"
+    | _ => panic!"Internal Erorr: Could not lookup variable"
   )
 
 mutual
@@ -114,7 +111,7 @@ mutual
     match var with
     | .named name =>
       match localTable.lookup name with
-      | some (.var ve) =>
+      | .ok (.var ve) =>
         let target ← freshRegister
         let base := (IR.Register.mk name).addr
 
@@ -125,8 +122,7 @@ mutual
           let code := Code.empty.emit <| getelementptr_nop target base
           pure (code, target)
 
-      | some _ => panic! "Internal Error: Expected variable entry"
-      | none   => panic! s!"Internal Error: Symbol {name} not defined"
+      | _ => panic! "Internal Error: Could not lookup variable"
 
     | .index array index =>
       match SemanticAnalysis.varType array localTable with
@@ -153,7 +149,7 @@ def compileCallStmt (name : String) (arguments : List Absyn.Expr): GenM Code := 
   let globalTable := (← get).globalTable
 
   match globalTable.lookup name with
-  | some (.proc pe) =>
+  | .ok (.proc pe) =>
     let zipped := arguments.zip pe.parameters.reverse
 
     let mut code : Code := Code.empty
@@ -177,9 +173,7 @@ def compileCallStmt (name : String) (arguments : List Absyn.Expr): GenM Code := 
         ops := ops.push (IR.Operand.mk ty r)
 
     pure <| code.emit <| call (IR.Global.mk name false) ops
-
-  | some _ => panic! s!"Internal Error: Expected procedure entry for {name}"
-  | none   => panic! s!"Internal Error: Symbol {name} not defined"
+  | _ => panic! s!"Internal Error: Could not lookup procedure entry"
 
 def generateCondition
   (condition : Absyn.Expr)
@@ -276,7 +270,7 @@ def compileProcDef (d : Absyn.ProcDef): GenM IR.Function := do
   let globalTable := s.globalTable
 
   match globalTable.lookup d.name with
-  | some (.proc pe) =>
+  | .ok (.proc pe) =>
     set { s with localTable := pe.local_table }
 
     let parameters := pe.parameters.reverse.map convertParameterToLLVM |>.toArray
@@ -300,8 +294,7 @@ def compileProcDef (d : Absyn.ProcDef): GenM IR.Function := do
       body := body
     }
 
-  | some _ => panic! "Internal Error: Expected procedure entry"
-  | none   => panic! s!"Internal Error: Symbol {d.name} not defined"
+  | _ => panic! "Internal Error: Could not lookup procedure entry"
 
 def compileProgram (p : Absyn.Program) : GenM IR.Program := do
   let globalTable := (← get).globalTable

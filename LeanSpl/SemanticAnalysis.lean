@@ -5,11 +5,12 @@ namespace SemanticAnalysis
 mutual
   def varType (var: Absyn.Variable) (table: Table.SymbolTable) : Except String Table.SplType :=
     match var with
-      | .named nv => match Table.SymbolTable.lookup table nv with
-        | some e => match e with
-          | .var ve => pure ve.typ
-          | _ => .error s!"{nv} is not a variable"
-        | none => .error s! "{nv} not found"
+      | .named nv => do
+        let e ← table.lookup nv
+
+        match e with
+        | .var ve => pure ve.typ
+        | _ => .error s!"{nv} is not a variable"
       | .index arr i => do
         let arr ← varType arr table
         let arrType ← match arr with
@@ -52,11 +53,11 @@ def checkAssignStmt (target: Absyn.Variable) (value: Absyn.Expr) (table: Table.S
 
 
 def checkCallStmt (name : String) (args: List Absyn.Expr) (table: Table.SymbolTable) (global: Table.SymbolTable): Except String Unit := do
-  let proc ← match Table.SymbolTable.lookup global name with
-    | some e => match e with
-      | .proc pe => pure pe
-      | _ => .error s!"{name} is not a procedure"
-    | none => .error s!"callStatement: {name} not found"
+  let e ← global.lookup name
+
+  let proc ← match e with
+  | .proc pe => pure pe
+  | _ => .error s!"{name} is not a procedure"
 
   let _ ← if args.length != proc.parameters.length then .error s!"{name}: number of arguments provided does not match the number of required parameters"
 
@@ -111,14 +112,14 @@ mutual
 end
 
 def checkProcDef (d: Absyn.ProcDef) (table: Table.SymbolTable) : Except String Unit := do
-  let ent ← match Table.SymbolTable.lookup table d.name with
-    | some ent => match ent with
-      | .proc pe => pure pe
-      | _ => .error "unreachable"
-    | none => .error "unreachable"
+  let e ← table.lookup d.name
+
+  let proc ← match e with
+  | .proc pe => pure pe
+  | _ => unreachable!
 
   for s in d.body do
-    let _ ← checkStatement s ent.local_table table
+    let _ ← checkStatement s proc.local_table table
 
 def checkGlobalDefinition (d: Absyn.GlobalDef) (table: Table.SymbolTable) : Except String Unit :=
   match d with
