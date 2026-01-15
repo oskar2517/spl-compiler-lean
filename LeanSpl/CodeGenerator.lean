@@ -191,7 +191,7 @@ def compileCallStmt
         let ty := convertTypeToLLVM p.typ
         ops := ops.push (IR.Operand.mk ty r)
 
-    pure <| code.emit <| IR.Instruction.call (IR.Global.mk name false) ops.toList
+    pure <| code.emit <| IR.Instruction.call (IR.Global.mk name false) ops
 
   | some _ => panic! s!"Internal Error: Expected procedure entry for {name}"
   | none   => panic! s!"Internal Error: Symbol {name} not defined"
@@ -307,7 +307,7 @@ end
 def compileProcDef (d : Absyn.ProcDef) (table : Table.SymbolTable) : GenM IR.Function := do
   match table.lookup d.name with
   | some (.proc pe) =>
-    let parameters := pe.parameters.reverse.map convertParameterToLLVM
+    let parameters := pe.parameters.reverse.map convertParameterToLLVM |>.toArray
 
     let mut body : Code := Code.empty
     body := body.emit <| IR.Label.mk "entry" true
@@ -325,7 +325,7 @@ def compileProcDef (d : Absyn.ProcDef) (table : Table.SymbolTable) : GenM IR.Fun
       name := IR.Global.mk d.name false
       type := IR.LLVMType.void
       parameters := parameters
-      body := body.toList
+      body := body
     }
 
   | some _ => panic! "Internal Error: Expected procedure entry"
@@ -340,36 +340,45 @@ def compileProgram (p : Absyn.Program) (table : Table.SymbolTable) : GenM IR.Pro
   let main : IR.Function := {
     name := ⟨"main", true⟩
     type := IR.LLVMType.i32
-    parameters := [],
-    body := [
+    parameters := #[],
+    body := #[
       IR.Label.mk "entry" true,
-      IR.Instruction.call ⟨"__init_time", true⟩ [],
-      IR.Instruction.call ⟨"__sdl_init_screen", true⟩ [],
-      IR.Instruction.call ⟨"main", false⟩ [],
-      IR.Instruction.call ⟨"__sdl_event_loop", true⟩ [],
+      IR.Instruction.call ⟨"__init_time", true⟩ #[],
+      IR.Instruction.call ⟨"__sdl_init_screen", true⟩ #[],
+      IR.Instruction.call ⟨"main", false⟩ #[],
+      IR.Instruction.call ⟨"__sdl_event_loop", true⟩ #[],
       IR.Instruction.ret_null IR.LLVMType.i32
     ]
   }
 
-  let functions ← procDefs.mapM (fun d => compileProcDef d table)
-  let declarations : List IR.Declaration :=
-    table.builtinProcedures.map (fun (procName, pe) =>
-      { name := IR.Global.mk procName false
-        parameters := pe.parameters.reverse.map (fun p =>
+  let functions := (← procDefs.mapM (fun d => compileProcDef d table)).toArray
+
+  let declarations : Array IR.Declaration :=
+    (table.builtinProcedures.map (fun (procName, pe) =>
+      let params :=
+        (pe.parameters.reverse.map (fun p =>
           if p.is_ref then
             IR.LLVMType.ref (convertTypeToLLVM p.typ)
           else
-            convertTypeToLLVM p.typ) })
+            convertTypeToLLVM p.typ
+        )).toArray
 
-  let declarations := declarations ++ [
-    ⟨⟨"__init_time", true⟩, []⟩,
-    ⟨⟨"__sdl_init_screen", true⟩, []⟩,
-    ⟨⟨"__sdl_event_loop", true⟩, []⟩
-  ]
+      {
+        name := IR.Global.mk procName false
+        parameters := params
+      }
+    )).toArray
+
+  let declarations : Array IR.Declaration :=
+    declarations ++ #[
+      ⟨⟨"__init_time", true⟩, #[]⟩,
+      ⟨⟨"__sdl_init_screen", true⟩, #[]⟩,
+      ⟨⟨"__sdl_event_loop", true⟩, #[]⟩
+    ]
 
   pure {
     declarations := declarations,
-    functions := main :: functions
+    functions := functions.push main
   }
 
 end CodeGenerator
