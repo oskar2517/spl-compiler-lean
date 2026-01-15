@@ -12,10 +12,10 @@ abbrev Parser (α : Type) := Std.Internal.Parsec.String.Parser α
 def ws1 : Parser Unit :=
   (many1Chars (satisfy Char.isWhitespace)) *> pure ()
 
-partial def comment : Parser Unit :=
+def comment : Parser Unit :=
   skipString "//" *> manyChars (satisfy (· != '\n')) *> (optional (skipChar '\n') *> pure ())
 
-partial def whitespace : Parser Unit :=
+def whitespace : Parser Unit :=
   (many (ws1 <|> comment)) *> pure ()
 
 def lexeme (p : Parser α) : Parser α :=
@@ -32,7 +32,7 @@ def sepBy1 (p : Parser α) (sep : Parser Unit) : Parser (List α) := do
 def sepBy {α} (p : Parser α) (sep : Parser Unit) : Parser (List α) :=
   sepBy1 p sep <|> pure []
 
-partial def chainl1 (p : Parser α) (op : Parser (α -> α -> α)) : Parser α := do
+def chainl1 (p : Parser α) (op : Parser (α -> α -> α)) : Parser α := do
   let mut x ← p
   repeat do
     let r ← attempt (some <$> op) <|> pure none
@@ -151,11 +151,11 @@ def namedVariable : Parser Variable := do
   let id ← lexeme ident
   pure <| Variable.named id
 
-partial def expr2Op : Parser (Expr -> Expr -> Expr) :=
+def expr2Op : Parser (Expr -> Expr -> Expr) :=
   (mul *> pure (fun l r => Expr.bin BinOp.mul l r))
   <|> (div *> pure (fun l r => Expr.bin BinOp.div l r))
 
-partial def expr1Op : Parser (Expr -> Expr -> Expr) :=
+def expr1Op : Parser (Expr -> Expr -> Expr) :=
   (add *> pure (fun l r => Expr.bin BinOp.add l r))
   <|> (sub *> pure (fun l r => Expr.bin BinOp.sub l r))
 
@@ -287,7 +287,7 @@ def globalDef : Parser GlobalDef := do
   <|>
   (GlobalDef.procedure <$> procDef)
 
-partial def globalDefList : Parser (List GlobalDef) := do
+def globalDefList : Parser (List GlobalDef) := do
   whitespace
   let defs ← many globalDef
   eof
