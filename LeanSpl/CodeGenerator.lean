@@ -16,7 +16,7 @@ structure GenState where
   nextLabel : Nat := 0
   nextRegister : Nat := 0
   globalTable : Table.SymbolTable
-  localTable : Table.SymbolTable
+  localTable := Table.SymbolTable.mk []
 deriving Repr
 
 abbrev GenM := StateM GenState

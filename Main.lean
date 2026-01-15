@@ -23,7 +23,7 @@ def debugCompile (prog: String): IO Unit :=
             | Except.ok ast => match TableBuilder.buildSymbolTable ast with
                 | Except.ok table => match SemanticAnalysis.checkProgram ast table with
                     | Except.ok _ => do
-                        let (ir, _st) := (CodeGenerator.compileProgram ast).run {globalTable := table, localTable := Table.SymbolTable.mk []}
+                        let (ir, _st) := (CodeGenerator.compileProgram ast).run {globalTable := table}
                         IO.println s!"{ir}"
                     | Except.error e => IO.println s!"merror: {e}"
                 | Except.error e => IO.println s!"merror: {e}"
