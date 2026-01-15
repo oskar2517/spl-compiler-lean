@@ -60,16 +60,15 @@ def initializeParameters (ps : List Table.Parameter) : List IR.Item :=
 
 def initializeVariables (d : Absyn.ProcDef) (localTable : Table.SymbolTable) : List IR.Item :=
   d.variables.map (fun v =>
-    let entry := localTable.lookup v.name
-    match entry with
-    | some e => match e with
-      | .var ve =>
-          let register := (IR.Register.mk v.name).addr
-          let type := convertTypeToLLVM ve.typ
-
-          alloca register type
-      | _ => panic! s!"Internal Error: Expected variable entry"
-    | _ => panic! s!"Internal Error: Symbol {d.name} not defined"
+    match localTable.lookup v.name with
+    | some (.var ve) =>
+        let r := (IR.Register.mk v.name).addr
+        let ty := convertTypeToLLVM ve.typ
+        alloca r ty
+    | some _ =>
+        panic! "Internal Error: Expected variable entry"
+    | none =>
+        panic! s!"Internal Error: Symbol {v.name} not defined"
   )
 
 mutual
@@ -324,7 +323,7 @@ def compileProcDef (d : Absyn.ProcDef) (table : Table.SymbolTable) : GenM IR.Fun
     body := body.emit ret
 
     pure {
-      name := IR.Global.mk d.name false
+      name := ⟨d.name, false⟩
       type := IR.LLVMType.void
       parameters := parameters
       body := body
@@ -366,7 +365,7 @@ def compileProgram (p : Absyn.Program) (table : Table.SymbolTable) : GenM IR.Pro
         )).toArray
 
       {
-        name := IR.Global.mk procName false
+        name := ⟨procName, false⟩
         parameters := params
       }
     )).toArray
