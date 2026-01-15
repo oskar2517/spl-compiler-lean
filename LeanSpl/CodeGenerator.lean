@@ -15,7 +15,9 @@ abbrev Code := Array IR.Item
 structure GenState where
   nextLabel : Nat := 0
   nextRegister : Nat := 0
-deriving Repr, Inhabited
+  globalTable : Table.SymbolTable
+  localTable : Table.SymbolTable
+deriving Repr
 
 abbrev GenM := StateM GenState
 
@@ -72,12 +74,7 @@ def initializeVariables (d : Absyn.ProcDef) (localTable : Table.SymbolTable) : L
   )
 
 mutual
-  def compileExpression
-    (expr : Absyn.Expr)
-    (table : Table.SymbolTable)
-    (localTable : Table.SymbolTable)
-    : GenM (Code × IR.Register) := do
-
+  def compileExpression (expr : Absyn.Expr): GenM (Code × IR.Register) := do
     match expr with
     | .int n =>
       let target ← freshRegister
@@ -85,8 +82,8 @@ mutual
       pure (code, target)
 
     | .bin op left right =>
-      let (lc, lreg) ← compileExpression left table localTable
-      let (rc, rreg) ← compileExpression right table localTable
+      let (lc, lreg) ← compileExpression left
+      let (rc, rreg) ← compileExpression right
       let target ← freshRegister
 
       let ins := match op with
@@ -100,22 +97,19 @@ mutual
       pure (code, target)
 
     | .un _ operand =>
-      let (oc, oreg) ← compileExpression operand table localTable
+      let (oc, oreg) ← compileExpression operand
       let target ← freshRegister
       let code := oc.emit <| sub_imm target oreg
       pure (code, target)
 
     | .var v =>
-      let (vc, addr) ← compileVariable v table localTable
+      let (vc, addr) ← compileVariable v
       let target ← freshRegister
       let code := vc.emit <| load target IR.LLVMType.i64 addr
       pure (code, target)
 
-  def compileVariable
-    (var : Absyn.Variable)
-    (table : Table.SymbolTable)
-    (localTable : Table.SymbolTable)
-    : GenM (Code × IR.Register) := do
+  def compileVariable (var : Absyn.Variable) : GenM (Code × IR.Register) := do
+    let localTable := (← get).localTable
 
     match var with
     | .named name =>
@@ -139,8 +133,8 @@ mutual
       | .ok ty =>
         let convertedType := convertTypeToLLVM ty
 
-        let (ac, areg) ← compileVariable array table localTable
-        let (ic, ireg) ← compileExpression index table localTable
+        let (ac, areg) ← compileVariable array
+        let (ic, ireg) ← compileExpression index
         let target ← freshRegister
 
         let code := (ac ++ ic).emit <| getelementptr target convertedType areg ireg
@@ -149,26 +143,16 @@ mutual
       | _ => panic! "Internal error: Could not calculate type of array"
 end
 
-def compileAssignStmt
-  (target : Absyn.Variable)
-  (value : Absyn.Expr)
-  (table : Table.SymbolTable)
-  (localTable : Table.SymbolTable)
-  : GenM Code := do
-
-  let (tc, addr) ← compileVariable target table localTable
-  let (vc, vreg) ← compileExpression value table localTable
+def compileAssignStmt (target : Absyn.Variable) (value : Absyn.Expr) : GenM Code := do
+  let (tc, addr) ← compileVariable target
+  let (vc, vreg) ← compileExpression value
 
   pure <| (tc ++ vc).emit <| store IR.LLVMType.i64 vreg addr
 
-def compileCallStmt
-  (name : String)
-  (arguments : List Absyn.Expr)
-  (table : Table.SymbolTable)
-  (localTable : Table.SymbolTable)
-  : GenM Code := do
+def compileCallStmt (name : String) (arguments : List Absyn.Expr): GenM Code := do
+  let globalTable := (← get).globalTable
 
-  match table.lookup name with
+  match globalTable.lookup name with
   | some (.proc pe) =>
     let zipped := arguments.zip pe.parameters.reverse
 
@@ -179,7 +163,7 @@ def compileCallStmt
       if p.is_ref then
         match a with
         | .var v =>
-          let (c, addr) ← compileVariable v table localTable
+          let (c, addr) ← compileVariable v
           code := code ++ c
 
           let ty := IR.LLVMType.ref (convertTypeToLLVM p.typ)
@@ -187,7 +171,7 @@ def compileCallStmt
         | _ =>
           panic! "Internal error: ref parameter expects variable argument"
       else
-        let (c, r) ← compileExpression a table localTable
+        let (c, r) ← compileExpression a
         code := code ++ c
         let ty := convertTypeToLLVM p.typ
         ops := ops.push (IR.Operand.mk ty r)
@@ -201,14 +185,12 @@ def generateCondition
   (condition : Absyn.Expr)
   (thenLabel : IR.Label)
   (elseLabel : IR.Label)
-  (table : Table.SymbolTable)
-  (localTable : Table.SymbolTable)
   : GenM Code := do
 
   match condition with
   | .bin op left right =>
-    let (lc, lreg) ← compileExpression left table localTable
-    let (rc, rreg) ← compileExpression right table localTable
+    let (lc, lreg) ← compileExpression left
+    let (rc, rreg) ← compileExpression right
     let target ← freshRegister
 
     let cmpIns := match op with
@@ -230,19 +212,17 @@ mutual
     (condition : Absyn.Expr)
     (thenBranch : Absyn.Stmt)
     (elseBranch : Option Absyn.Stmt)
-    (table : Table.SymbolTable)
-    (localTable : Table.SymbolTable)
     : GenM Code := do
 
     let thenLabel ← freshLabel
     let elseLabel ← freshLabel
     let mergeLabel ← freshLabel
 
-    let condCode ← generateCondition condition thenLabel elseLabel table localTable
-    let thenCode ← compileStatement table localTable thenBranch
+    let condCode ← generateCondition condition thenLabel elseLabel
+    let thenCode ← compileStatement thenBranch
 
     let elseCode ← match elseBranch with
-      | some b => compileStatement table localTable b
+      | some b => compileStatement b
       | none   => pure Code.empty
 
     let mut code := Code.empty
@@ -256,19 +236,13 @@ mutual
     code := code.emit mergeLabel
     pure code
 
-  partial def compileWhileStatement
-    (condition : Absyn.Expr)
-    (body : Absyn.Stmt)
-    (table : Table.SymbolTable)
-    (localTable : Table.SymbolTable)
-    : GenM Code := do
-
+  partial def compileWhileStatement (condition : Absyn.Expr) (body : Absyn.Stmt) : GenM Code := do
     let condLabel ← freshLabel
     let bodyLabel ← freshLabel
     let endLabel ← freshLabel
 
-    let condCode ← generateCondition condition bodyLabel endLabel table localTable
-    let bodyCode ← compileStatement table localTable body
+    let condCode ← generateCondition condition bodyLabel endLabel
+    let bodyCode ← compileStatement body
 
     let mut code := Code.empty
     code := code.emit (br condLabel)
@@ -280,34 +254,31 @@ mutual
     code := code.emit endLabel
     pure code
 
-  partial def compileBlockStatement
-    (stmts : List Absyn.Stmt)
-    (table : Table.SymbolTable)
-    (localTable : Table.SymbolTable)
-    : GenM Code := do
+  partial def compileBlockStatement (stmts : List Absyn.Stmt): GenM Code := do
     let mut code := Code.empty
     for s in stmts do
-      let c ← compileStatement table localTable s
+      let c ← compileStatement s
       code := code ++ c
     pure code
 
-  partial def compileStatement
-    (table : Table.SymbolTable)
-    (localTable : Table.SymbolTable)
-    (s : Absyn.Stmt)
-    : GenM Code :=
+  partial def compileStatement (s : Absyn.Stmt) : GenM Code :=
     match s with
-    | .assign target value => compileAssignStmt target value table localTable
-    | .call name arguments => compileCallStmt name arguments table localTable
-    | .if_ condition t e   => compileIfStatement condition t e table localTable
-    | .while_ condition b  => compileWhileStatement condition b table localTable
-    | .block stmts         => compileBlockStatement stmts table localTable
+    | .assign target value => compileAssignStmt target value
+    | .call name arguments => compileCallStmt name arguments
+    | .if_ condition t e   => compileIfStatement condition t e
+    | .while_ condition b  => compileWhileStatement condition b
+    | .block stmts         => compileBlockStatement stmts
     | .empty               => pure Code.empty
 end
 
-def compileProcDef (d : Absyn.ProcDef) (table : Table.SymbolTable) : GenM IR.Function := do
-  match table.lookup d.name with
+def compileProcDef (d : Absyn.ProcDef): GenM IR.Function := do
+  let s <- get
+  let globalTable := s.globalTable
+
+  match globalTable.lookup d.name with
   | some (.proc pe) =>
+    set { s with localTable := pe.local_table }
+
     let parameters := pe.parameters.reverse.map convertParameterToLLVM |>.toArray
 
     let mut body : Code := Code.empty
@@ -317,7 +288,7 @@ def compileProcDef (d : Absyn.ProcDef) (table : Table.SymbolTable) : GenM IR.Fun
     body := body ++ (initializeVariables d pe.local_table).toArray
 
     for s in d.body do
-      let c ← compileStatement table pe.local_table s
+      let c ← compileStatement s
       body := body ++ c
 
     body := body.emit ret
@@ -332,7 +303,9 @@ def compileProcDef (d : Absyn.ProcDef) (table : Table.SymbolTable) : GenM IR.Fun
   | some _ => panic! "Internal Error: Expected procedure entry"
   | none   => panic! s!"Internal Error: Symbol {d.name} not defined"
 
-def compileProgram (p : Absyn.Program) (table : Table.SymbolTable) : GenM IR.Program := do
+def compileProgram (p : Absyn.Program) : GenM IR.Program := do
+  let globalTable := (← get).globalTable
+
   let procDefs : List Absyn.ProcDef :=
     p.definitions.filterMap (fun
       | .procedure d => some d
@@ -352,10 +325,10 @@ def compileProgram (p : Absyn.Program) (table : Table.SymbolTable) : GenM IR.Pro
     ]
   }
 
-  let functions := (← procDefs.mapM (fun d => compileProcDef d table)).toArray
+  let functions := (← procDefs.mapM (fun d => compileProcDef d)).toArray
 
   let declarations : Array IR.Declaration :=
-    (table.builtinProcedures.map (fun (procName, pe) =>
+    (globalTable.builtinProcedures.map (fun (procName, pe) =>
       let params :=
         (pe.parameters.reverse.map (fun p =>
           if p.is_ref then
