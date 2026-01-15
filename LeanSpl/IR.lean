@@ -101,7 +101,7 @@ instance : ToString Instruction where
   | .store ty value address =>
       s!"store {ty} {value}, {ty}* {address}, align 8"
   | .load target type address =>
-      s!"{target} = load {type}, {type}* {address}"
+      s!"{target} = load {type}, i64* {address}"
   | .br_con condition label_then label_else =>
       s!"br i1 {condition}, label {label_then}, label {label_else}"
   | .br label =>
