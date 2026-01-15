@@ -5,31 +5,31 @@ import LeanSpl.SemanticAnalysis
 
 namespace CodeGenerator
 
+abbrev Code := Array IR.Item
+
+@[inline] def Code.empty : Code := #[]
+
+@[inline] def Code.emit (c : Code) (e : IR.Item) : Code :=
+  c.push e
+
 structure GenState where
   nextLabel : Nat := 0
   nextRegister : Nat := 0
-  currentRegister : IR.Register := ⟨"0"⟩
 deriving Repr, Inhabited
 
 abbrev GenM := StateM GenState
 
 def freshLabel : GenM IR.Label := do
   let s ← get
-  let l := IR.Label.mk (toString s.nextLabel) false
+  let l : IR.Label := ⟨toString s.nextLabel, false⟩
   set { s with nextLabel := s.nextLabel + 1 }
   return l
 
 def freshRegister : GenM IR.Register := do
   let s ← get
-  let r : IR.Register := ⟨s!"{s.nextRegister}"⟩
-  set { s with
-    nextRegister := s.nextRegister + 1
-    currentRegister := r
-  }
+  let r : IR.Register := ⟨toString s.nextRegister⟩
+  set { s with nextRegister := s.nextRegister + 1 }
   return r
-
-def currentRegister : GenM IR.Register := do
-  return (← get).currentRegister
 
 partial def convertTypeToLLVM : Table.SplType -> IR.LLVMType
   | .primitive .int  => .i64
@@ -46,20 +46,17 @@ def convertParameterToLLVM (p : Table.Parameter) : IR.Operand :=
     register := ⟨p.name⟩
   }
 
-def wrapInstructions (is : List IR.Instruction) : List IR.BodyElement :=
-  is.map IR.BodyElement.instruction
-
-def initializeParameters (ps : List Table.Parameter) : List IR.Instruction :=
+def initializeParameters (ps : List Table.Parameter) : List IR.Item :=
   ps.flatMap (fun p =>
-    let register := IR.Register.mk p.name
-    let type := (convertParameterToLLVM p).type
+    let r := IR.Register.mk p.name
+    let ty := (convertParameterToLLVM p).type
     [
-      IR.Instruction.alloca register.addr type,
-      IR.Instruction.store type register register.addr
+      IR.Instruction.alloca r.addr ty,
+      IR.Instruction.store ty r r.addr
     ]
   )
 
-def initializeVariables (d : Absyn.ProcDef) (localTable : Table.SymbolTable) : List IR.Instruction :=
+def initializeVariables (d : Absyn.ProcDef) (localTable : Table.SymbolTable) : List IR.Item :=
   d.variables.map (fun v =>
     let entry := localTable.lookup v.name
     match entry with
@@ -74,242 +71,265 @@ def initializeVariables (d : Absyn.ProcDef) (localTable : Table.SymbolTable) : L
   )
 
 mutual
-  def compileExpression (expr : Absyn.Expr) (table : Table.SymbolTable) (localTable : Table.SymbolTable) : GenM (List IR.BodyElement) := do
+  def compileExpression
+    (expr : Absyn.Expr)
+    (table : Table.SymbolTable)
+    (localTable : Table.SymbolTable)
+    : GenM (Code × IR.Register) := do
+
     match expr with
-      | .int n =>
-        let target ← freshRegister
-        pure <| [IR.BodyElement.instruction <| IR.Instruction.add_ld target n]
-      | .bin op left right =>
-        let leftInstructions ← compileExpression left table localTable
-        let leftRegister ← currentRegister
+    | .int n =>
+      let target ← freshRegister
+      let code := Code.empty.emit <| IR.Instruction.add_ld target n
+      pure (code, target)
 
-        let rightInstructions ← compileExpression right table localTable
-        let rightRegister ← currentRegister
+    | .bin op left right =>
+      let (lc, lreg) ← compileExpression left table localTable
+      let (rc, rreg) ← compileExpression right table localTable
+      let target ← freshRegister
 
-        let target ← freshRegister
+      let ins := match op with
+        | .add => IR.Instruction.add target lreg rreg
+        | .sub => IR.Instruction.sub target lreg rreg
+        | .mul => IR.Instruction.mul target lreg rreg
+        | .div => IR.Instruction.sdiv target lreg rreg
+        | _    => panic! "Internal Error: Unexpected operator"
 
-        let ins := match op with
-          | .add => IR.Instruction.add target leftRegister rightRegister
-          | .sub => IR.Instruction.sub target leftRegister rightRegister
-          | .mul => IR.Instruction.mul target leftRegister rightRegister
-          | .div => IR.Instruction.sdiv target leftRegister rightRegister
-          | _ => panic! s!"Internal Error: Unexpected operator"
+      let code := lc ++ rc |>.emit ins
+      pure (code, target)
 
-        pure <| leftInstructions ++ rightInstructions ++ [IR.BodyElement.instruction ins]
-      | .un _ operand =>
-        let operandInstructions ← compileExpression operand table localTable
-        let operandRegister ← currentRegister
+    | .un _ operand =>
+      let (oc, oreg) ← compileExpression operand table localTable
+      let target ← freshRegister
+      let code := oc.emit <| IR.Instruction.sub_imm target oreg
+      pure (code, target)
 
-        let target ← freshRegister
-        let ins := IR.Instruction.sub_imm target operandRegister
+    | .var v =>
+      let (vc, addr) ← compileVariable v table localTable
+      let target ← freshRegister
+      let code := vc.emit <| IR.Instruction.load target IR.LLVMType.i64 addr
+      pure (code, target)
 
-        pure <| operandInstructions ++ [IR.BodyElement.instruction ins]
-      | .var var =>
-        let variableInstructions ← compileVariable var table localTable
-        let variableExpressionRegister ← currentRegister
+  def compileVariable
+    (var : Absyn.Variable)
+    (table : Table.SymbolTable)
+    (localTable : Table.SymbolTable)
+    : GenM (Code × IR.Register) := do
 
-        let target ← freshRegister
-        let ins := IR.Instruction.load target IR.LLVMType.i64 variableExpressionRegister
-
-        pure <| variableInstructions ++ [IR.BodyElement.instruction ins]
-
-
-  def compileVariable (var : Absyn.Variable) (table : Table.SymbolTable) (localTable : Table.SymbolTable) : GenM (List IR.BodyElement) := do
     match var with
     | .named name =>
-      let entry := localTable.lookup name
-      match entry with
-      | some e => match e with
-        | .var ve =>
-          let target ← freshRegister
-          let value := (IR.Register.mk name).addr
+      match localTable.lookup name with
+      | some (.var ve) =>
+        let target ← freshRegister
+        let base := (IR.Register.mk name).addr
 
-          if (ve.is_ref)
-            then pure <| [IR.BodyElement.instruction <| IR.Instruction.load target (IR.LLVMType.ref IR.LLVMType.i64) value]
-            else pure <| [IR.BodyElement.instruction <| IR.Instruction.getelementptr_nop target value]
-        | _ => panic! s!"Internal Error: Expected variable entry"
-      | _ => panic! s!"Internal Error: Symbol {name} not defined"
+        if ve.is_ref then
+          let code := Code.empty.emit <| IR.Instruction.load target (IR.LLVMType.ref IR.LLVMType.i64) base
+          pure (code, target)
+        else
+          let code := Code.empty.emit <| IR.Instruction.getelementptr_nop target base
+          pure (code, target)
+
+      | some _ => panic! "Internal Error: Expected variable entry"
+      | none   => panic! s!"Internal Error: Symbol {name} not defined"
+
     | .index array index =>
-      let arrayType := SemanticAnalysis.varType array localTable
-      match arrayType with
-        | .ok ty =>
-          let convertedType := convertTypeToLLVM ty
+      match SemanticAnalysis.varType array localTable with
+      | .ok ty =>
+        let convertedType := convertTypeToLLVM ty
 
-          let arrayInstructions ← compileVariable array table localTable
-          let arrayRegister ← currentRegister
+        let (ac, areg) ← compileVariable array table localTable
+        let (ic, ireg) ← compileExpression index table localTable
+        let target ← freshRegister
 
-          let indexInstructions ← compileExpression index table localTable
-          let indexRegister ← currentRegister
+        let code := (ac ++ ic).emit <| IR.Instruction.getelementptr target convertedType areg ireg
+        pure (code, target)
 
-          let target ← freshRegister
-
-          let ins := IR.Instruction.getelementptr target convertedType arrayRegister indexRegister
-
-          pure <| arrayInstructions ++ indexInstructions ++ [IR.BodyElement.instruction ins]
-        | _ => panic! s!"Internal error: Could not calculate type of array"
-
+      | _ => panic! "Internal error: Could not calculate type of array"
 end
 
-def compileAssignStmt (target : Absyn.Variable) (value : Absyn.Expr) (table : Table.SymbolTable) (localTable : Table.SymbolTable) : GenM (List IR.BodyElement) := do
-  let variableInstructions ← compileVariable target table localTable
-  let addressRegister ← currentRegister
+def compileAssignStmt
+  (target : Absyn.Variable)
+  (value : Absyn.Expr)
+  (table : Table.SymbolTable)
+  (localTable : Table.SymbolTable)
+  : GenM Code := do
 
-  let valueInstructions ← compileExpression value table localTable
-  let valueRegister ← currentRegister
+  let (tc, addr) ← compileVariable target table localTable
+  let (vc, vreg) ← compileExpression value table localTable
 
-  let storeInstruction := IR.Instruction.store IR.LLVMType.i64 valueRegister addressRegister
-
-  pure <| variableInstructions ++ valueInstructions ++ [IR.BodyElement.instruction storeInstruction]
+  pure <| (tc ++ vc).emit <| IR.Instruction.store IR.LLVMType.i64 vreg addr
 
 def compileCallStmt
   (name : String)
   (arguments : List Absyn.Expr)
   (table : Table.SymbolTable)
-  (localTable : Table.SymbolTable) : GenM (List IR.BodyElement) := do
+  (localTable : Table.SymbolTable)
+  : GenM Code := do
 
-  let entry := table.lookup name
-  match entry with
+  match table.lookup name with
   | some (.proc pe) =>
-      let zipped := arguments.zip pe.parameters.reverse
-      let argPairs ← zipped.mapM (fun (a, p) => do
-        if p.is_ref then
-          match a with
-          | .var v => do
-              let instructions ← compileVariable v table localTable
-              let r ← currentRegister
-              let ty := IR.LLVMType.ref (convertTypeToLLVM p.typ)
-              pure (instructions, IR.Operand.mk ty r)
-          | _ =>
-              panic! "Internal error: ref parameter expects variable argument"
-        else do
-          let instructions ← compileExpression a table localTable
-          let r ← currentRegister
-          let ty := convertTypeToLLVM p.typ
-          pure (instructions, IR.Operand.mk ty r)
-      )
+    let zipped := arguments.zip pe.parameters.reverse
 
-      let argInstrs := argPairs.foldr (fun (instrs, _) acc => instrs ++ acc) []
-      let argOps := argPairs.map (fun (_, op) => op)
-      let callElem := IR.BodyElement.instruction <| IR.Instruction.call (IR.Global.mk name false) argOps
+    let mut code : Code := Code.empty
+    let mut ops : Array IR.Operand := #[]
 
-      pure (argInstrs ++ [callElem])
+    for (a, p) in zipped do
+      if p.is_ref then
+        match a with
+        | .var v =>
+          let (c, addr) ← compileVariable v table localTable
+          code := code ++ c
+
+          let ty := IR.LLVMType.ref (convertTypeToLLVM p.typ)
+          ops := ops.push (IR.Operand.mk ty addr)
+        | _ =>
+          panic! "Internal error: ref parameter expects variable argument"
+      else
+        let (c, r) ← compileExpression a table localTable
+        code := code ++ c
+        let ty := convertTypeToLLVM p.typ
+        ops := ops.push (IR.Operand.mk ty r)
+
+    pure <| code.emit <| IR.Instruction.call (IR.Global.mk name false) ops.toList
+
   | some _ => panic! s!"Internal Error: Expected procedure entry for {name}"
-  | none => panic! s!"Internal Error: Symbol {name} not defined"
+  | none   => panic! s!"Internal Error: Symbol {name} not defined"
 
 def generateCondition
   (condition : Absyn.Expr)
   (thenLabel : IR.Label)
   (elseLabel : IR.Label)
   (table : Table.SymbolTable)
-  (localTable : Table.SymbolTable) : GenM (List IR.BodyElement) := do
+  (localTable : Table.SymbolTable)
+  : GenM Code := do
 
   match condition with
-  | Absyn.Expr.bin op left right =>
-    let leftInstructions ← compileExpression left table localTable
-    let leftRegister ← currentRegister
-
-    let rightInstructions ← compileExpression right table localTable
-    let rightRegister ← currentRegister
-
+  | .bin op left right =>
+    let (lc, lreg) ← compileExpression left table localTable
+    let (rc, rreg) ← compileExpression right table localTable
     let target ← freshRegister
 
     let cmpIns := match op with
-      | .eq => IR.Instruction.icmp target IR.RelOp.eq leftRegister rightRegister
-      | .ne => IR.Instruction.icmp target IR.RelOp.ne leftRegister rightRegister
-      | .lt => IR.Instruction.icmp target IR.RelOp.slt leftRegister rightRegister
-      | .le => IR.Instruction.icmp target IR.RelOp.sle leftRegister rightRegister
-      | .gt => IR.Instruction.icmp target IR.RelOp.sgt leftRegister rightRegister
-      | .ge => IR.Instruction.icmp target IR.RelOp.sge leftRegister rightRegister
-      | _ => panic! s!"Internal error: Unexpected operator"
+      | .eq => IR.Instruction.icmp target IR.RelOp.eq  lreg rreg
+      | .ne => IR.Instruction.icmp target IR.RelOp.ne  lreg rreg
+      | .lt => IR.Instruction.icmp target IR.RelOp.slt lreg rreg
+      | .le => IR.Instruction.icmp target IR.RelOp.sle lreg rreg
+      | .gt => IR.Instruction.icmp target IR.RelOp.sgt lreg rreg
+      | .ge => IR.Instruction.icmp target IR.RelOp.sge lreg rreg
+      | _   => panic! "Internal error: Unexpected operator"
 
     let brIns := IR.Instruction.br_con target thenLabel elseLabel
+    pure <| (lc ++ rc) |>.emit cmpIns |>.emit brIns
 
-    pure <| leftInstructions ++ rightInstructions ++ [IR.BodyElement.instruction cmpIns, IR.BodyElement.instruction brIns]
-  | _ => panic! s!"Internal error: Expected binary expression"
+  | _ => panic! "Internal error: Expected binary expression"
 
 mutual
--- todo: empty statement?
   partial def compileIfStatement
     (condition : Absyn.Expr)
     (thenBranch : Absyn.Stmt)
     (elseBranch : Option Absyn.Stmt)
     (table : Table.SymbolTable)
-    (localTable : Table.SymbolTable) : GenM (List IR.BodyElement) := do
+    (localTable : Table.SymbolTable)
+    : GenM Code := do
 
     let thenLabel ← freshLabel
     let elseLabel ← freshLabel
     let mergeLabel ← freshLabel
 
-    let condInstructions ← generateCondition condition thenLabel elseLabel table localTable
+    let condCode ← generateCondition condition thenLabel elseLabel table localTable
+    let thenCode ← compileStatement table localTable thenBranch
 
-    let thenInstructions ← compileStatement table localTable thenBranch
-    let brThenIns := IR.Instruction.br mergeLabel
-
-    let elseInstructions ← match elseBranch with
+    let elseCode ← match elseBranch with
       | some b => compileStatement table localTable b
-      | _ => pure []
-    let brElseIns := IR.Instruction.br mergeLabel
+      | none   => pure Code.empty
 
-    pure <| condInstructions ++ [IR.BodyElement.label thenLabel] ++ thenInstructions
-    ++ [IR.BodyElement.instruction brThenIns] ++ [IR.BodyElement.label elseLabel]
-    ++ elseInstructions ++ [IR.BodyElement.instruction brElseIns, IR.BodyElement.label mergeLabel]
+    let mut code := Code.empty
+    code := code ++ condCode
+    code := code.emit thenLabel
+    code := code ++ thenCode
+    code := code.emit (IR.Instruction.br mergeLabel)
+    code := code.emit elseLabel
+    code := code ++ elseCode
+    code := code.emit (IR.Instruction.br mergeLabel)
+    code := code.emit mergeLabel
+    pure code
 
   partial def compileWhileStatement
     (condition : Absyn.Expr)
     (body : Absyn.Stmt)
     (table : Table.SymbolTable)
-    (localTable : Table.SymbolTable) : GenM (List IR.BodyElement) := do
+    (localTable : Table.SymbolTable)
+    : GenM Code := do
 
     let condLabel ← freshLabel
     let bodyLabel ← freshLabel
     let endLabel ← freshLabel
 
-    let condBrIns := IR.Instruction.br condLabel
+    let condCode ← generateCondition condition bodyLabel endLabel table localTable
+    let bodyCode ← compileStatement table localTable body
 
-    let condInstructions ← generateCondition condition bodyLabel endLabel table localTable
+    let mut code := Code.empty
+    code := code.emit (IR.Instruction.br condLabel)
+    code := code.emit condLabel
+    code := code ++ condCode
+    code := code.emit bodyLabel
+    code := code ++ bodyCode
+    code := code.emit (IR.Instruction.br condLabel)
+    code := code.emit endLabel
+    pure code
 
-    let bodyInstructions ← compileStatement table localTable body
+  partial def compileBlockStatement
+    (stmts : List Absyn.Stmt)
+    (table : Table.SymbolTable)
+    (localTable : Table.SymbolTable)
+    : GenM Code := do
+    let mut code := Code.empty
+    for s in stmts do
+      let c ← compileStatement table localTable s
+      code := code ++ c
+    pure code
 
-    pure <| [IR.BodyElement.instruction condBrIns, IR.BodyElement.label condLabel] ++ condInstructions
-    ++ [IR.BodyElement.label bodyLabel] ++ bodyInstructions ++ [IR.BodyElement.instruction condBrIns, IR.BodyElement.label endLabel]
-
-  partial def compileBlockStatement (stmts : List Absyn.Stmt) (table : Table.SymbolTable) (localTable : Table.SymbolTable) : GenM (List IR.BodyElement) := do
-    let blocks ← stmts.mapM (compileStatement table localTable)
-    pure <| blocks.foldr (· ++ ·) []
-
-  partial def compileStatement (table : Table.SymbolTable) (localTable : Table.SymbolTable) (s : Absyn.Stmt) : GenM (List IR.BodyElement) :=
+  partial def compileStatement
+    (table : Table.SymbolTable)
+    (localTable : Table.SymbolTable)
+    (s : Absyn.Stmt)
+    : GenM Code :=
     match s with
     | .assign target value => compileAssignStmt target value table localTable
     | .call name arguments => compileCallStmt name arguments table localTable
-    | .if_ condition then_branch else_branch => compileIfStatement condition then_branch else_branch table localTable
-    | .while_ condition body => compileWhileStatement condition body table localTable
-    | .block stmts => compileBlockStatement stmts table localTable
-    | .empty => pure []
-  end
+    | .if_ condition t e   => compileIfStatement condition t e table localTable
+    | .while_ condition b  => compileWhileStatement condition b table localTable
+    | .block stmts         => compileBlockStatement stmts table localTable
+    | .empty               => pure Code.empty
+end
 
 def compileProcDef (d : Absyn.ProcDef) (table : Table.SymbolTable) : GenM IR.Function := do
-  let entry := table.lookup d.name
-  match entry with
-  | some e => match e with
-    | .proc pe => -- TODO: Parameters are reversed
-      let parameters := pe.parameters.reverse.map convertParameterToLLVM
-      let body := [IR.BodyElement.label <| IR.Label.mk "entry" true]
-      let body := body ++ (wrapInstructions <| initializeParameters pe.parameters.reverse)
-      let body := body ++ (wrapInstructions <| initializeVariables d pe.local_table)
+  match table.lookup d.name with
+  | some (.proc pe) =>
+    let parameters := pe.parameters.reverse.map convertParameterToLLVM
 
-      let stmtLists ← d.body.mapM (compileStatement table pe.local_table)
-      let body := body ++ stmtLists.foldr (· ++ ·) []
+    let mut body : Code := Code.empty
+    body := body.emit <| IR.Label.mk "entry" true
 
-      let body := body ++ [IR.BodyElement.instruction IR.Instruction.ret]
+    body := body ++ (initializeParameters pe.parameters.reverse).toArray
+    body := body ++ (initializeVariables d pe.local_table).toArray
 
-      pure {
-        name := IR.Global.mk d.name false
-        type := IR.LLVMType.void
-        parameters := parameters
-        body := body
-      }
-    | _ => panic! s!"Internal Error: Expected procedure entry"
-  | none => panic! s!"Internal Error: Symbol {d.name} not defined"
+    for s in d.body do
+      let c ← compileStatement table pe.local_table s
+      body := body ++ c
+
+    body := body.emit IR.Instruction.ret
+
+    pure {
+      name := IR.Global.mk d.name false
+      type := IR.LLVMType.void
+      parameters := parameters
+      body := body.toList
+    }
+
+  | some _ => panic! "Internal Error: Expected procedure entry"
+  | none   => panic! s!"Internal Error: Symbol {d.name} not defined"
 
 def compileProgram (p : Absyn.Program) (table : Table.SymbolTable) : GenM IR.Program := do
   let procDefs : List Absyn.ProcDef :=
@@ -322,12 +342,12 @@ def compileProgram (p : Absyn.Program) (table : Table.SymbolTable) : GenM IR.Pro
     type := IR.LLVMType.i32
     parameters := [],
     body := [
-      IR.BodyElement.label <| IR.Label.mk "entry" true,
-      IR.BodyElement.instruction <| IR.Instruction.call ⟨"__init_time", true⟩ [],
-      IR.BodyElement.instruction <| IR.Instruction.call ⟨"__sdl_init_screen", true⟩ [],
-      IR.BodyElement.instruction <| IR.Instruction.call ⟨"main", false⟩ [],
-      IR.BodyElement.instruction <| IR.Instruction.call ⟨"__sdl_event_loop", true⟩ [],
-      IR.BodyElement.instruction <| IR.Instruction.ret_null IR.LLVMType.i32
+      IR.Label.mk "entry" true,
+      IR.Instruction.call ⟨"__init_time", true⟩ [],
+      IR.Instruction.call ⟨"__sdl_init_screen", true⟩ [],
+      IR.Instruction.call ⟨"main", false⟩ [],
+      IR.Instruction.call ⟨"__sdl_event_loop", true⟩ [],
+      IR.Instruction.ret_null IR.LLVMType.i32
     ]
   }
 

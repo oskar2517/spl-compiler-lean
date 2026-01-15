@@ -115,21 +115,27 @@ instance : ToString Instruction where
   | .ret => "ret void"
   | .ret_null type => s!"ret {type} 0"
 
-inductive BodyElement where
+inductive Item where
   | label (l : Label)
   | instruction (i : Instruction)
-  deriving Repr
+  deriving Repr, Inhabited
 
-instance : ToString BodyElement where
+instance : ToString Item where
   toString
   | .label l => l.definition
   | .instruction i => s!"    {i}"
+
+instance : Coe IR.Instruction IR.Item where
+  coe i := .instruction i
+
+instance : Coe IR.Label IR.Item where
+  coe l := .label l
 
 structure Function where
   name: Global
   type: LLVMType
   parameters: List Operand
-  body: List BodyElement
+  body: List Item
   deriving Repr, Inhabited
 
 instance : ToString Function where
