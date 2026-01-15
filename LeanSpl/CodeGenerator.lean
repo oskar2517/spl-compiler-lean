@@ -46,13 +46,15 @@ def convertParameterToLLVM (p : Table.Parameter) : IR.Operand :=
     register := ⟨p.name⟩
   }
 
+open IR.Instruction
+
 def initializeParameters (ps : List Table.Parameter) : List IR.Item :=
   ps.flatMap (fun p =>
     let r := IR.Register.mk p.name
     let ty := (convertParameterToLLVM p).type
     [
-      IR.Instruction.alloca r.addr ty,
-      IR.Instruction.store ty r r.addr
+      alloca r.addr ty,
+      store ty r r.addr
     ]
   )
 
@@ -65,7 +67,7 @@ def initializeVariables (d : Absyn.ProcDef) (localTable : Table.SymbolTable) : L
           let register := (IR.Register.mk v.name).addr
           let type := convertTypeToLLVM ve.typ
 
-          IR.Instruction.alloca register type
+          alloca register type
       | _ => panic! s!"Internal Error: Expected variable entry"
     | _ => panic! s!"Internal Error: Symbol {d.name} not defined"
   )
@@ -80,7 +82,7 @@ mutual
     match expr with
     | .int n =>
       let target ← freshRegister
-      let code := Code.empty.emit <| IR.Instruction.add_ld target n
+      let code := Code.empty.emit <| add_ld target n
       pure (code, target)
 
     | .bin op left right =>
@@ -89,10 +91,10 @@ mutual
       let target ← freshRegister
 
       let ins := match op with
-        | .add => IR.Instruction.add target lreg rreg
-        | .sub => IR.Instruction.sub target lreg rreg
-        | .mul => IR.Instruction.mul target lreg rreg
-        | .div => IR.Instruction.sdiv target lreg rreg
+        | .add => add target lreg rreg
+        | .sub => sub target lreg rreg
+        | .mul => mul target lreg rreg
+        | .div => sdiv target lreg rreg
         | _    => panic! "Internal Error: Unexpected operator"
 
       let code := lc ++ rc |>.emit ins
@@ -101,13 +103,13 @@ mutual
     | .un _ operand =>
       let (oc, oreg) ← compileExpression operand table localTable
       let target ← freshRegister
-      let code := oc.emit <| IR.Instruction.sub_imm target oreg
+      let code := oc.emit <| sub_imm target oreg
       pure (code, target)
 
     | .var v =>
       let (vc, addr) ← compileVariable v table localTable
       let target ← freshRegister
-      let code := vc.emit <| IR.Instruction.load target IR.LLVMType.i64 addr
+      let code := vc.emit <| load target IR.LLVMType.i64 addr
       pure (code, target)
 
   def compileVariable
@@ -124,10 +126,10 @@ mutual
         let base := (IR.Register.mk name).addr
 
         if ve.is_ref then
-          let code := Code.empty.emit <| IR.Instruction.load target (IR.LLVMType.ref IR.LLVMType.i64) base
+          let code := Code.empty.emit <| load target (IR.LLVMType.ref IR.LLVMType.i64) base
           pure (code, target)
         else
-          let code := Code.empty.emit <| IR.Instruction.getelementptr_nop target base
+          let code := Code.empty.emit <| getelementptr_nop target base
           pure (code, target)
 
       | some _ => panic! "Internal Error: Expected variable entry"
@@ -142,7 +144,7 @@ mutual
         let (ic, ireg) ← compileExpression index table localTable
         let target ← freshRegister
 
-        let code := (ac ++ ic).emit <| IR.Instruction.getelementptr target convertedType areg ireg
+        let code := (ac ++ ic).emit <| getelementptr target convertedType areg ireg
         pure (code, target)
 
       | _ => panic! "Internal error: Could not calculate type of array"
@@ -158,7 +160,7 @@ def compileAssignStmt
   let (tc, addr) ← compileVariable target table localTable
   let (vc, vreg) ← compileExpression value table localTable
 
-  pure <| (tc ++ vc).emit <| IR.Instruction.store IR.LLVMType.i64 vreg addr
+  pure <| (tc ++ vc).emit <| store IR.LLVMType.i64 vreg addr
 
 def compileCallStmt
   (name : String)
@@ -191,7 +193,7 @@ def compileCallStmt
         let ty := convertTypeToLLVM p.typ
         ops := ops.push (IR.Operand.mk ty r)
 
-    pure <| code.emit <| IR.Instruction.call (IR.Global.mk name false) ops
+    pure <| code.emit <| call (IR.Global.mk name false) ops
 
   | some _ => panic! s!"Internal Error: Expected procedure entry for {name}"
   | none   => panic! s!"Internal Error: Symbol {name} not defined"
@@ -211,15 +213,15 @@ def generateCondition
     let target ← freshRegister
 
     let cmpIns := match op with
-      | .eq => IR.Instruction.icmp target IR.RelOp.eq  lreg rreg
-      | .ne => IR.Instruction.icmp target IR.RelOp.ne  lreg rreg
-      | .lt => IR.Instruction.icmp target IR.RelOp.slt lreg rreg
-      | .le => IR.Instruction.icmp target IR.RelOp.sle lreg rreg
-      | .gt => IR.Instruction.icmp target IR.RelOp.sgt lreg rreg
-      | .ge => IR.Instruction.icmp target IR.RelOp.sge lreg rreg
+      | .eq => icmp target IR.RelOp.eq  lreg rreg
+      | .ne => icmp target IR.RelOp.ne  lreg rreg
+      | .lt => icmp target IR.RelOp.slt lreg rreg
+      | .le => icmp target IR.RelOp.sle lreg rreg
+      | .gt => icmp target IR.RelOp.sgt lreg rreg
+      | .ge => icmp target IR.RelOp.sge lreg rreg
       | _   => panic! "Internal error: Unexpected operator"
 
-    let brIns := IR.Instruction.br_con target thenLabel elseLabel
+    let brIns := br_con target thenLabel elseLabel
     pure <| (lc ++ rc) |>.emit cmpIns |>.emit brIns
 
   | _ => panic! "Internal error: Expected binary expression"
@@ -248,10 +250,10 @@ mutual
     code := code ++ condCode
     code := code.emit thenLabel
     code := code ++ thenCode
-    code := code.emit (IR.Instruction.br mergeLabel)
+    code := code.emit (br mergeLabel)
     code := code.emit elseLabel
     code := code ++ elseCode
-    code := code.emit (IR.Instruction.br mergeLabel)
+    code := code.emit (br mergeLabel)
     code := code.emit mergeLabel
     pure code
 
@@ -270,12 +272,12 @@ mutual
     let bodyCode ← compileStatement table localTable body
 
     let mut code := Code.empty
-    code := code.emit (IR.Instruction.br condLabel)
+    code := code.emit (br condLabel)
     code := code.emit condLabel
     code := code ++ condCode
     code := code.emit bodyLabel
     code := code ++ bodyCode
-    code := code.emit (IR.Instruction.br condLabel)
+    code := code.emit (br condLabel)
     code := code.emit endLabel
     pure code
 
@@ -319,7 +321,7 @@ def compileProcDef (d : Absyn.ProcDef) (table : Table.SymbolTable) : GenM IR.Fun
       let c ← compileStatement table pe.local_table s
       body := body ++ c
 
-    body := body.emit IR.Instruction.ret
+    body := body.emit ret
 
     pure {
       name := IR.Global.mk d.name false
@@ -343,11 +345,11 @@ def compileProgram (p : Absyn.Program) (table : Table.SymbolTable) : GenM IR.Pro
     parameters := #[],
     body := #[
       IR.Label.mk "entry" true,
-      IR.Instruction.call ⟨"__init_time", true⟩ #[],
-      IR.Instruction.call ⟨"__sdl_init_screen", true⟩ #[],
-      IR.Instruction.call ⟨"main", false⟩ #[],
-      IR.Instruction.call ⟨"__sdl_event_loop", true⟩ #[],
-      IR.Instruction.ret_null IR.LLVMType.i32
+      call ⟨"__init_time", true⟩ #[],
+      call ⟨"__sdl_init_screen", true⟩ #[],
+      call ⟨"main", false⟩ #[],
+      call ⟨"__sdl_event_loop", true⟩ #[],
+      ret_null IR.LLVMType.i32
     ]
   }
 

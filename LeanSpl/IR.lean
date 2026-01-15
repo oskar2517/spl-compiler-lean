@@ -100,8 +100,8 @@ instance : ToString Instruction where
       s!"{target} = getelementptr i64, i64* {address}, i64 0"
   | .store ty value address =>
       s!"store {ty} {value}, {ty}* {address}, align 8"
-  | .load target ty address =>
-      s!"{target} = load {ty}, {ty}* {address}"
+  | .load target type address =>
+      s!"{target} = load {type}, {type}* {address}"
   | .br_con condition label_then label_else =>
       s!"br i1 {condition}, label {label_then}, label {label_else}"
   | .br label =>
