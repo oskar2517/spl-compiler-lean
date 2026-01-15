@@ -5,7 +5,7 @@ namespace SemanticAnalysis
 mutual
   def varType (var: Absyn.Variable) (table: Table.SymbolTable) : Except String Table.SplType :=
     match var with
-      | .named nv => match Table.SymbolTable.lookup table none nv with
+      | .named nv => match Table.SymbolTable.lookup table nv with
         | some e => match e with
           | .var ve => pure ve.typ
           | _ => .error s!"{nv} is not a variable"
@@ -52,7 +52,7 @@ def checkAssignStmt (target: Absyn.Variable) (value: Absyn.Expr) (table: Table.S
 
 
 def checkCallStmt (name : String) (args: List Absyn.Expr) (table: Table.SymbolTable) (global: Table.SymbolTable): Except String Unit := do
-  let proc ← match Table.SymbolTable.lookup global none name with
+  let proc ← match Table.SymbolTable.lookup global name with
     | some e => match e with
       | .proc pe => pure pe
       | _ => .error s!"{name} is not a procedure"
@@ -111,7 +111,7 @@ mutual
 end
 
 def checkProcDef (d: Absyn.ProcDef) (table: Table.SymbolTable) : Except String Unit := do
-  let ent ← match Table.SymbolTable.lookup table none d.name with
+  let ent ← match Table.SymbolTable.lookup table d.name with
     | some ent => match ent with
       | .proc pe => pure pe
       | _ => .error "unreachable"

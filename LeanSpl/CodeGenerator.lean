@@ -61,7 +61,7 @@ def initializeParameters (ps : List Table.Parameter) : List IR.Instruction :=
 
 def initializeVariables (d : Absyn.ProcDef) (localTable : Table.SymbolTable) : List IR.Instruction :=
   d.variables.map (fun v =>
-    let entry := localTable.lookup none v.name
+    let entry := localTable.lookup v.name
     match entry with
     | some e => match e with
       | .var ve =>
@@ -117,7 +117,7 @@ mutual
   def compileVariable (var : Absyn.Variable) (table : Table.SymbolTable) (localTable : Table.SymbolTable) : GenM (List IR.BodyElement) := do
     match var with
     | .named name =>
-      let entry := table.lookup localTable name
+      let entry := localTable.lookup name
       match entry with
       | some e => match e with
         | .var ve =>
@@ -167,7 +167,7 @@ def compileCallStmt
   (table : Table.SymbolTable)
   (localTable : Table.SymbolTable) : GenM (List IR.BodyElement) := do
 
-  let entry := table.lookup none name
+  let entry := table.lookup name
   match entry with
   | some (.proc pe) =>
       let zipped := arguments.zip pe.parameters.reverse
@@ -288,7 +288,7 @@ mutual
   end
 
 def compileProcDef (d : Absyn.ProcDef) (table : Table.SymbolTable) : GenM IR.Function := do
-  let entry := table.lookup none d.name
+  let entry := table.lookup d.name
   match entry with
   | some e => match e with
     | .proc pe => -- TODO: Parameters are reversed

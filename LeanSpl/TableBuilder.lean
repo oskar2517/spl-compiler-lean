@@ -5,7 +5,7 @@ namespace TableBuilder
 
 def typeFromTypeExpression (te : Absyn.TypeExpr) (table : Table.SymbolTable): Except String Table.SplType :=
     match te with
-        | Absyn.TypeExpr.named nte => match Table.SymbolTable.lookup table none nte with
+        | Absyn.TypeExpr.named nte => match Table.SymbolTable.lookup table nte with
             | some t => match t with
                 | Table.Entry.type t => pure t.typ
                 | _ => .error s!"{nte} is not a type"

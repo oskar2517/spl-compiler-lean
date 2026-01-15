@@ -61,14 +61,10 @@ namespace SymbolTable
 
     pure ⟨ ent :: table.entries ⟩
 
-  def lookup (table : SymbolTable) (upperLevel : Option SymbolTable) (name : String) : Option Entry := do
+  def lookup (table : SymbolTable) (name : String) : Option Entry := do
     match table.entries.find? (fun e => e.fst == name) with
       | some e => pure e.snd
-      | none => match upperLevel with
-        | some global => match global.entries.find? (fun e => e.fst == name) with
-          | some e => pure e.snd
-          | none => none
-        | none => none
+      | none => none
 
   def builtinProcedures (t : Table.SymbolTable) : List (String × Table.ProcedureEntry) :=
     t.entries.filterMap (fun (name, entry) =>
