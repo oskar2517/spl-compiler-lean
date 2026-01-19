@@ -47,7 +47,7 @@ mutual
 
   structure SymbolTable : Type where
     entries: List (String × Entry)
-    deriving Repr
+    deriving Repr, Inhabited
 end
 
 namespace SymbolTable

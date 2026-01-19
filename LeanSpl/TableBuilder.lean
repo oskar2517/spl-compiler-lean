@@ -3,90 +3,96 @@ import LeanSpl.Table
 
 namespace TableBuilder
 
-def typeFromTypeExpression (te : Absyn.TypeExpr) (table : Table.SymbolTable): Except String Table.SplType :=
-    match te with
-        | Absyn.TypeExpr.named nte => do
-            let e <- table.lookup nte
+abbrev ExceptTable := Except String Table.SymbolTable
 
-            match e with
-                | Table.Entry.type t => pure t.typ
-                | _ => .error s!"{nte} is not a type"
-        | Absyn.TypeExpr.array size base => match typeFromTypeExpression base table with
-            | .ok typ => pure <| Table.SplType.arr ⟨ typ, size ⟩
-            | .error e => Except.error e
+private def typeFromTypeExpression (typeExpr : Absyn.TypeExpr) (globTable : Table.SymbolTable) : Except String Table.SplType := do
+  match typeExpr with
+  | .named nte =>
+      match (← globTable.lookup nte) with
+      | .type t => pure t.typ
+      | _       => .error s!"{nte} is not a type"
+  | .array size base => do
+      let typ ← typeFromTypeExpression base globTable
+      pure <| .arr ⟨typ, size⟩
 
+private def enterParamDef (paramDef : Absyn.ParamDef) (locTable : Table.SymbolTable) (globTable : Table.SymbolTable) : ExceptTable := do
+  let typ ← typeFromTypeExpression paramDef.type_expr globTable
+  locTable.enter paramDef.name (.var ⟨typ, paramDef.is_ref⟩)
 
-def enterParamDef (param : Absyn.ParamDef) (table : Table.SymbolTable) (global : Table.SymbolTable) : Except String Table.SymbolTable := do
-    let typ <- typeFromTypeExpression param.type_expr global
-    let entry := Table.Entry.var ⟨ typ, param.is_ref ⟩
-    Table.SymbolTable.enter table param.name entry
+private def enterVarDef (varDef : Absyn.VarDef) (locTable : Table.SymbolTable) (globTable : Table.SymbolTable) : ExceptTable := do
+  let typ ← typeFromTypeExpression varDef.type_expr globTable
+  locTable.enter varDef.name (.var ⟨typ, false⟩)
 
-def enterVarDef (var : Absyn.VarDef) (table : Table.SymbolTable) (global : Table.SymbolTable) : Except String Table.SymbolTable := do
-    let typ <- typeFromTypeExpression var.type_expr global
-    let entry := Table.Entry.var ⟨ typ, false ⟩
-    Table.SymbolTable.enter table var.name entry
-
-def enterProcDef (proc : Absyn.ProcDef) (table: Table.SymbolTable) : Except String Table.SymbolTable := do
-    let mut localTable := ⟨ [] ⟩
+private def enterProcDef (procDef : Absyn.ProcDef) (globTable: Table.SymbolTable) : ExceptTable := do
+    let mut locTable := default
     let mut params := []
-    for param in proc.parameters do
-        localTable <- enterParamDef param localTable table
-        let typ <- typeFromTypeExpression param.type_expr table
-        params := ⟨ param.name, typ, param.is_ref ⟩ :: params
+    for p in procDef.parameters do
+        locTable <- enterParamDef p locTable globTable
+        let typ <- typeFromTypeExpression p.type_expr globTable
+        params := ⟨ p.name, typ, p.is_ref ⟩ :: params
 
-    for var in proc.variables do
-        localTable <- enterVarDef var localTable table
+    for v in procDef.variables do
+        locTable <- enterVarDef v locTable globTable
 
-    let entry := Table.Entry.proc ⟨ localTable, params, false ⟩
+    let entry := Table.Entry.proc ⟨ locTable, params, false ⟩
 
-    Table.SymbolTable.enter table proc.name entry
+    globTable.enter procDef.name entry
 
-def enterTypeDef (typ: Absyn.TypeDef) (table : Table.SymbolTable): Except String Table.SymbolTable := do
-    let splTyp <- typeFromTypeExpression typ.type_expr table
-    let entry := Table.Entry.type ⟨ splTyp ⟩
-    Table.SymbolTable.enter table typ.name entry
+private def enterTypeDef (typeDef: Absyn.TypeDef) (globTable : Table.SymbolTable): ExceptTable := do
+    let typ <- typeFromTypeExpression typeDef.type_expr globTable
+    let entry := Table.Entry.type ⟨ typ ⟩
+    globTable.enter typeDef.name entry
 
-def enterGlobalDefinition (definition: Absyn.GlobalDef) (table: Table.SymbolTable): Except String Table.SymbolTable :=
-    match definition with
-        | Absyn.GlobalDef.procedure proc => enterProcDef proc table
-        | Absyn.GlobalDef.type typ => enterTypeDef typ table
+private def enterGlobalDefinition (globDef: Absyn.GlobalDef) (globTable: Table.SymbolTable): ExceptTable :=
+    match globDef with
+    | Absyn.GlobalDef.procedure proc => enterProcDef proc globTable
+    | Absyn.GlobalDef.type typ => enterTypeDef typ globTable
 
+private def builtinProc (name : String) (params : List Table.Parameter) : String × Table.Entry :=
+  (name, .proc ⟨⟨[]⟩, params, true⟩)
+
+private def builtinTyp (name : String) (typ : Table.SplType) : String × Table.Entry :=
+  (name, .type ⟨typ⟩)
 
 def initTable : Table.SymbolTable :=
-    ⟨ [
-        ("printi", Table.Entry.proc ⟨ ⟨ [] ⟩, [⟨ "i", Table.SplType.primitive Table.PrimitiveType.int, false ⟩], true ⟩),
-        ("printc", Table.Entry.proc ⟨ ⟨ [] ⟩, [⟨ "c", Table.SplType.primitive Table.PrimitiveType.int, false ⟩], true ⟩),
-        ("readi", Table.Entry.proc ⟨ ⟨ [] ⟩, [⟨ "i", Table.SplType.primitive Table.PrimitiveType.int, true ⟩], true ⟩),
-        ("readc", Table.Entry.proc ⟨ ⟨ [] ⟩, [⟨ "c", Table.SplType.primitive Table.PrimitiveType.int, true ⟩], true ⟩),
-        ("exit", Table.Entry.proc ⟨ ⟨ [] ⟩, [], true ⟩),
-        ("time", Table.Entry.proc ⟨ ⟨ [] ⟩, [⟨ "t", Table.SplType.primitive Table.PrimitiveType.int, true ⟩], true ⟩),
-        ("clearAll", Table.Entry.proc ⟨ ⟨ [] ⟩, [⟨ "c", Table.SplType.primitive Table.PrimitiveType.int, false ⟩], true ⟩),
-        ("setPixel", Table.Entry.proc ⟨ ⟨ [] ⟩, [
-            ⟨ "a", Table.SplType.primitive Table.PrimitiveType.int, false ⟩,
-            ⟨ "b", Table.SplType.primitive Table.PrimitiveType.int, false ⟩,
-            ⟨ "c", Table.SplType.primitive Table.PrimitiveType.int, false ⟩,
-        ], true ⟩),
-        ("drawLine", Table.Entry.proc ⟨ ⟨ [] ⟩, [
-            ⟨ "a", Table.SplType.primitive Table.PrimitiveType.int, false ⟩,
-            ⟨ "b", Table.SplType.primitive Table.PrimitiveType.int, false ⟩,
-            ⟨ "c", Table.SplType.primitive Table.PrimitiveType.int, false ⟩,
-            ⟨ "d", Table.SplType.primitive Table.PrimitiveType.int, false ⟩,
-            ⟨ "e", Table.SplType.primitive Table.PrimitiveType.int, false ⟩,
-        ], true ⟩),
-        ("drawCircle", Table.Entry.proc ⟨ ⟨ [] ⟩, [
-            ⟨ "a", Table.SplType.primitive Table.PrimitiveType.int, false ⟩,
-            ⟨ "b", Table.SplType.primitive Table.PrimitiveType.int, false ⟩,
-            ⟨ "c", Table.SplType.primitive Table.PrimitiveType.int, false ⟩,
-            ⟨ "d", Table.SplType.primitive Table.PrimitiveType.int, false ⟩,
-        ], true⟩),
-        ("int", Table.Entry.type ⟨ Table.SplType.primitive Table.PrimitiveType.int  ⟩ )
-    ] ⟩
+  ⟨[
+    builtinProc "printi"   [⟨"i", .primitive .int, false⟩],
+    builtinProc "printc"   [⟨"c", .primitive .int, false⟩],
+    builtinProc "readi"    [⟨"i", .primitive .int, true⟩],
+    builtinProc "readc"    [⟨"c", .primitive .int, true⟩],
+    builtinProc "exit"     [],
+    builtinProc "time"     [⟨"t", .primitive .int, true⟩],
+    builtinProc "clearAll" [⟨"c", .primitive .int, false⟩],
 
-def buildSymbolTable (p : Absyn.Program) : Except String Table.SymbolTable := do
+    builtinProc "setPixel"
+      [ ⟨"a", .primitive .int, false⟩
+      , ⟨"b", .primitive .int, false⟩
+      , ⟨"c", .primitive .int, false⟩
+      ],
+
+    builtinProc "drawLine"
+      [ ⟨"a", .primitive .int, false⟩
+      , ⟨"b", .primitive .int, false⟩
+      , ⟨"c", .primitive .int, false⟩
+      , ⟨"d", .primitive .int, false⟩
+      , ⟨"e", .primitive .int, false⟩
+      ],
+
+    builtinProc "drawCircle"
+      [ ⟨"a", .primitive .int, false⟩
+      , ⟨"b", .primitive .int, false⟩
+      , ⟨"c", .primitive .int, false⟩
+      , ⟨"d", .primitive .int, false⟩
+      ],
+
+    builtinTyp "int" (.primitive .int)
+  ]⟩
+
+def buildSymbolTable (prog : Absyn.Program) : ExceptTable := do
     let mut table := initTable
-    for definition in p.definitions do
+    for definition in prog.definitions do
         table <- enterGlobalDefinition definition table
 
-    pure table
+    .ok table
 
 end TableBuilder
