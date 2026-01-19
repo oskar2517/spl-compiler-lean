@@ -28,7 +28,7 @@ mutual
   structure ProcedureEntry where
     local_table: SymbolTable
     parameters: List Parameter
-    builtin: Bool
+    ia_builtin: Bool
     deriving Repr
 
   structure VariableEntry where
@@ -70,7 +70,7 @@ namespace SymbolTable
     t.entries.filterMap (fun (name, entry) =>
       match entry with
       | .proc pe =>
-          if pe.builtin then some (name, pe) else none
+          if pe.ia_builtin then some (name, pe) else none
       | _ => none)
 
 end SymbolTable
