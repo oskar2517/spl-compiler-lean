@@ -1,6 +1,5 @@
 import Std.Data.TreeMap
 
-open Std.TreeMap
 namespace Table
 
 mutual
@@ -28,7 +27,7 @@ mutual
   structure ProcedureEntry where
     local_table: SymbolTable
     parameters: List Parameter
-    ia_builtin: Bool
+    is_builtin: Bool
     deriving Repr
 
   structure VariableEntry where
@@ -53,24 +52,25 @@ end
 
 namespace SymbolTable
 
+  def contains (table : SymbolTable) (name : String) : Bool :=
+    table.entries.any (fun (n, _) => n == name)
+
   def enter (table : SymbolTable) (name : String) (entry : Entry) : Except String SymbolTable := do
-    let mut ent := (name, entry)
-    for e in table.entries do
-      if e.fst = name then
-        ent <- .error s!"{name} already exists"
+    if table.contains name then
+      .error s!"{name} already exists"
+    else
+      .ok ⟨(name, entry) :: table.entries⟩
 
-    pure ⟨ ent :: table.entries ⟩
-
-  def lookup (table : SymbolTable) (name : String) : Except String Entry := do
-    match table.entries.find? (fun e => e.fst == name) with
-      | some e => pure e.snd
-      | none => .error s!"{name} not defined"
+  def lookup (table : SymbolTable) (name : String) : Except String Entry :=
+    match table.entries.find? (fun (n, _) => n == name) with
+    | some (_, e) => .ok e
+    | none        => .error s!"{name} not defined"
 
   def builtinProcedures (t : Table.SymbolTable) : List (String × Table.ProcedureEntry) :=
     t.entries.filterMap (fun (name, entry) =>
       match entry with
       | .proc pe =>
-          if pe.ia_builtin then some (name, pe) else none
+          if pe.is_builtin then some (name, pe) else none
       | _ => none)
 
 end SymbolTable
