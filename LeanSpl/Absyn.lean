@@ -44,35 +44,35 @@ inductive TypeExpr where
   deriving Repr
 
 structure ParamDef where
-  name: String
-  type_expr: TypeExpr
-  is_ref: Bool
+  name      : String
+  type_expr : TypeExpr
+  is_ref    : Bool
   deriving Repr
 
 structure VarDef where
-  name: String
-  type_expr: TypeExpr
+  name      : String
+  type_expr : TypeExpr
   deriving Repr
 
 structure ProcDef where
-  name: String
-  parameters: List ParamDef
-  variables: List VarDef
-  body: List Stmt
+  name       : String
+  parameters : List ParamDef
+  variables  : List VarDef
+  body       : List Stmt
   deriving Repr
 
 structure TypeDef where
-  name: String
-  type_expr: TypeExpr
+  name      : String
+  type_expr : TypeExpr
   deriving Repr
 
 inductive GlobalDef where
-  | procedure (d: ProcDef)
-  | type (d: TypeDef)
+  | procedure (d : ProcDef)
+  | type      (d : TypeDef)
   deriving Repr
 
 structure Program where
-  definitions: List GlobalDef
+  definitions : List GlobalDef
   deriving Repr
 
 end Absyn

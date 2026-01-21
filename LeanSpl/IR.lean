@@ -129,7 +129,7 @@ instance : ToString Instruction where
       s!"ret {ty} 0"
 
 inductive Item where
-  | label (l : Label)
+  | label       (l : Label)
   | instruction (i : Instruction)
   deriving Repr, Inhabited
 
